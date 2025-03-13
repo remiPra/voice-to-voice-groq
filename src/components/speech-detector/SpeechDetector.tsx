@@ -771,6 +771,24 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
           {/* En-tête */}
           <div className="bg-white p-4 border-b shadow-sm">
             <h1 className="text-xl font-bold text-gray-800">Assistant Médical</h1>
+            {isListening && !isCalibrating && (
+                <button
+                  onClick={calibrateMicrophone}
+                  className="w-full px-3 py-2 rounded-md font-medium bg-yellow-400 hover:bg-yellow-500 text-white"
+                >
+                  Recalibrer microphone
+                </button>
+              )}
+            <button
+                onClick={toggleListening}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                  isListening 
+                    ? "bg-red-500 hover:bg-red-600 text-white" 
+                    : "bg-green-500 hover:bg-green-600 text-white"
+                }`}
+              >
+                {isListening ? "Arrêter l'écoute" : "Commencer l'écoute"}
+              </button>
             <button 
             className=" bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
             onClick={() => {
@@ -781,7 +799,6 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
               }
             }}
           >
-            {/* Icône d'engrenage */}
             ouverure
           </button>
             <div className="flex items-center space-x-2 mt-2">
