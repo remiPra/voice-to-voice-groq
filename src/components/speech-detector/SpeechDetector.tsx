@@ -42,8 +42,11 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
   const [isListening, setIsListening] = useState<boolean>(false);
   const [speechBooleanState, setSpeechBooleanState] = useState<number>(0);
   const [speechEndCount, setSpeechEndCount] = useState<number>(0);
+  // @ts-ignore - Utilisé dans handleSpeechEnd mais pas dans le JSX
   const [lastEndTime, setLastEndTime] = useState<string>("");
+  // @ts-ignore - Utilisé dans handleSpeechEnd mais pas dans le JSX
   const [endNotification, setEndNotification] = useState<boolean>(false);
+// @ts-ignore - Utilisé dans handleSpeechEnd mais pas dans le JSX
   const [recordingEnded, setRecordingEnded] = useState(false);
   const [transcriptions, setTranscriptions] = useState<{ id: string; text: string; timestamp: string }[]>([]);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
@@ -287,31 +290,53 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
 
   const speakResponse = async (text: string) => {
     try {
-      const response = await fetch("http://localhost:5000/tts", {
+      // Configuration de la requête pour Google TTS API
+      const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${import.meta.env.VITE_GOOGLE_API_KEY}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text, voice: "fr-FR-DeniseNeural" }),
+        headers: { 
+          "Content-Type": "application/json",
+        //   "Authorization": `Bearer ${import.meta.env.VITE_GOOGLE_API_KEY}` // Clé API Google
+        },
+        body: JSON.stringify({
+          input: { text: text },
+          voice: { 
+            languageCode: "fr-FR", 
+            name: "fr-FR-Wavenet-C",  // Vous pouvez choisir différentes voix
+            ssmlGender: "FEMALE" 
+          },
+          audioConfig: { audioEncoding: "MP3" }
+        })
       });
-
+  
       if (!response.ok) {
-        throw new Error("Échec de la génération de l'audio.");
+        throw new Error("Échec de la génération de l'audio avec Google TTS.");
       }
-
-      const audioBlob = await response.blob();
+  
+      const data = await response.json();
+      
+      // Convertir la réponse base64 en blob audio
+      const audioContent = data.audioContent;
+      const byteCharacters = atob(audioContent);
+      const byteNumbers = new Array(byteCharacters.length);
+      
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      const audioBlob = new Blob([byteArray], { type: "audio/mp3" });
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      // Ajouter l'URL à notre liste
+      // Ajouter l'URL à la liste
       setAudioUrls(prev => [...prev, audioUrl]);
-
-      // Créer un élément <audio> et l'ajouter au DOM
+  
+      // Créer un élément audio et le lire
       const audio = document.createElement("audio");
       audio.src = audioUrl;
       audio.controls = true;
       document.body.appendChild(audio);
-
-      // Lecture automatique
       audio.play();
-
+  
       // Arrêter l'audio quand l'utilisateur commence à parler
       const observer = new MutationObserver(() => {
         if (speechBooleanStateRef.current === 1) {
@@ -326,6 +351,49 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
       console.error("Erreur lors de la lecture du TTS:", error);
     }
   };
+
+
+//   const speakResponse = async (text: string) => {
+//     try {
+//       const response = await fetch("http://localhost:5000/tts", {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({ text: text, voice: "fr-FR-DeniseNeural" }),
+//       });
+
+//       if (!response.ok) {
+//         throw new Error("Échec de la génération de l'audio.");
+//       }
+
+//       const audioBlob = await response.blob();
+//       const audioUrl = URL.createObjectURL(audioBlob);
+      
+//       // Ajouter l'URL à notre liste
+//       setAudioUrls(prev => [...prev, audioUrl]);
+
+//       // Créer un élément <audio> et l'ajouter au DOM
+//       const audio = document.createElement("audio");
+//       audio.src = audioUrl;
+//       audio.controls = true;
+//       document.body.appendChild(audio);
+
+//       // Lecture automatique
+//       audio.play();
+
+//       // Arrêter l'audio quand l'utilisateur commence à parler
+//       const observer = new MutationObserver(() => {
+//         if (speechBooleanStateRef.current === 1) {
+//           if (!audio.paused) {
+//             audio.pause();
+//             audio.currentTime = 0;
+//           }
+//         }
+//       });
+//       observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+//     } catch (error) {
+//       console.error("Erreur lors de la lecture du TTS:", error);
+//     }
+//   };
 
   const sendAudioForTranscription = async (
     audioBlob: Blob

@@ -10,7 +10,7 @@ function App() {
   const handleSpeechEnd = () => {
     console.log("L'utilisateur a fini de parler");
   };
-
+    // @ts-ignore - Utilisé dans handleSpeechEnd mais pas dans le JSX
   const handleVolumeChange = (volume: number) => {
     // Vous pouvez limiter le nombre d'appels si nécessaire
     // console.log("Volume actuel:", volume);
