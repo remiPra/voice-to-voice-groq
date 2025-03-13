@@ -288,98 +288,55 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
     }
   };
 
-  const speakResponse = async (text: string) => {
-    try {
-      // Configuration de la requête pour Google TTS API
-      const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${import.meta.env.VITE_GOOGLE_API_KEY}`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-        //   "Authorization": `Bearer ${import.meta.env.VITE_GOOGLE_API_KEY}` // Clé API Google
-        },
-        body: JSON.stringify({
-          input: { text: text },
-          voice: { 
-            languageCode: "fr-FR", 
-            name: "fr-FR-Wavenet-C",  // Vous pouvez choisir différentes voix
-            ssmlGender: "FEMALE" 
-          },
-          audioConfig: { audioEncoding: "MP3" }
-        })
-      });
-  
-      if (!response.ok) {
-        throw new Error("Échec de la génération de l'audio avec Google TTS.");
-      }
-  
-      const data = await response.json();
-      
-      // Convertir la réponse base64 en blob audio
-      const audioContent = data.audioContent;
-      const byteCharacters = atob(audioContent);
-      const byteNumbers = new Array(byteCharacters.length);
-      
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      
-      const byteArray = new Uint8Array(byteNumbers);
-      const audioBlob = new Blob([byteArray], { type: "audio/mp3" });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      
-      // Ajouter l'URL à la liste
-      setAudioUrls(prev => [...prev, audioUrl]);
-  
-      // Créer un élément audio et le lire
-      const audio = document.createElement("audio");
-      audio.src = audioUrl;
-      audio.controls = true;
-      document.body.appendChild(audio);
-      audio.play();
-  
-      // Arrêter l'audio quand l'utilisateur commence à parler
-      const observer = new MutationObserver(() => {
-        if (speechBooleanStateRef.current === 1) {
-          if (!audio.paused) {
-            audio.pause();
-            audio.currentTime = 0;
-          }
-        }
-      });
-      observer.observe(document.body, { attributes: true, childList: true, subtree: true });
-    } catch (error) {
-      console.error("Erreur lors de la lecture du TTS:", error);
-    }
-  };
-
-
 //   const speakResponse = async (text: string) => {
 //     try {
-//       const response = await fetch("http://localhost:5000/tts", {
+//       // Configuration de la requête pour Google TTS API
+//       const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${import.meta.env.VITE_GOOGLE_API_KEY}`, {
 //         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({ text: text, voice: "fr-FR-DeniseNeural" }),
+//         headers: { 
+//           "Content-Type": "application/json",
+//         //   "Authorization": `Bearer ${import.meta.env.VITE_GOOGLE_API_KEY}` // Clé API Google
+//         },
+//         body: JSON.stringify({
+//           input: { text: text },
+//           voice: { 
+//             languageCode: "fr-FR", 
+//             name: "fr-FR-Wavenet-C",  // Vous pouvez choisir différentes voix
+//             ssmlGender: "FEMALE" 
+//           },
+//           audioConfig: { audioEncoding: "MP3" }
+//         })
 //       });
-
+  
 //       if (!response.ok) {
-//         throw new Error("Échec de la génération de l'audio.");
+//         throw new Error("Échec de la génération de l'audio avec Google TTS.");
 //       }
-
-//       const audioBlob = await response.blob();
+  
+//       const data = await response.json();
+      
+//       // Convertir la réponse base64 en blob audio
+//       const audioContent = data.audioContent;
+//       const byteCharacters = atob(audioContent);
+//       const byteNumbers = new Array(byteCharacters.length);
+      
+//       for (let i = 0; i < byteCharacters.length; i++) {
+//         byteNumbers[i] = byteCharacters.charCodeAt(i);
+//       }
+      
+//       const byteArray = new Uint8Array(byteNumbers);
+//       const audioBlob = new Blob([byteArray], { type: "audio/mp3" });
 //       const audioUrl = URL.createObjectURL(audioBlob);
       
-//       // Ajouter l'URL à notre liste
+//       // Ajouter l'URL à la liste
 //       setAudioUrls(prev => [...prev, audioUrl]);
-
-//       // Créer un élément <audio> et l'ajouter au DOM
+  
+//       // Créer un élément audio et le lire
 //       const audio = document.createElement("audio");
 //       audio.src = audioUrl;
 //       audio.controls = true;
 //       document.body.appendChild(audio);
-
-//       // Lecture automatique
 //       audio.play();
-
+  
 //       // Arrêter l'audio quand l'utilisateur commence à parler
 //       const observer = new MutationObserver(() => {
 //         if (speechBooleanStateRef.current === 1) {
@@ -394,6 +351,49 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
 //       console.error("Erreur lors de la lecture du TTS:", error);
 //     }
 //   };
+
+
+  const speakResponse = async (text: string) => {
+    try {
+      const response = await fetch("https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text, voice: "fr-FR-DeniseNeural" }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Échec de la génération de l'audio.");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      // Ajouter l'URL à notre liste
+      setAudioUrls(prev => [...prev, audioUrl]);
+
+      // Créer un élément <audio> et l'ajouter au DOM
+      const audio = document.createElement("audio");
+      audio.src = audioUrl;
+      audio.controls = true;
+      document.body.appendChild(audio);
+
+      // Lecture automatique
+      audio.play();
+
+      // Arrêter l'audio quand l'utilisateur commence à parler
+      const observer = new MutationObserver(() => {
+        if (speechBooleanStateRef.current === 1) {
+          if (!audio.paused) {
+            audio.pause();
+            audio.currentTime = 0;
+          }
+        }
+      });
+      observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+    } catch (error) {
+      console.error("Erreur lors de la lecture du TTS:", error);
+    }
+  };
 
   const sendAudioForTranscription = async (
     audioBlob: Blob
@@ -765,9 +765,9 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
 
   
     return (
-      <div className="flex h-screen bg-gray-100 overflow-hidden">
+      <div className="flex h-screen bg-gray-100 overflow-hidden relative">
         {/* Chat principal - occupe la majorité de l'écran */}
-        <div className="flex-grow flex flex-col h-full">
+        <div className="w-full flex flex-col h-full">
           {/* En-tête */}
           <div className="bg-white p-4 border-b shadow-sm">
             <h1 className="text-xl font-bold text-gray-800">Assistant Médical</h1>
@@ -888,10 +888,10 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
         </div>
   
         {/* Panneau technique latéral - collapsible */}
-        <div className="relative">
+        <div className="fixed top-0 right-0 h-full">
           {/* Bouton pour ouvrir/fermer le panneau */}
           <button 
-            className="absolute -left-12 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
+            className="fixed right-12 z-55 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
             onClick={() => {
               const panel = document.getElementById('techPanel');
               if (panel) {
@@ -909,9 +909,9 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
           
           {/* Panneau technique */}
           <div 
-            id="techPanel"
-            className="w-96 h-full bg-white border-l shadow-lg overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out"
-          >
+             id="techPanel"
+             className="w-96 h-full bg-white border-l shadow-lg overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
+           >
             <div className="p-4 bg-gray-800 text-white">
               <h2 className="text-lg font-bold">Panneau Technique</h2>
             </div>
