@@ -771,6 +771,19 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
           {/* En-tête */}
           <div className="bg-white p-4 border-b shadow-sm">
             <h1 className="text-xl font-bold text-gray-800">Assistant Médical</h1>
+            <button 
+            className="fixed right-12 z-55 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
+            onClick={() => {
+              const panel = document.getElementById('techPanel');
+              if (panel) {
+                panel.classList.toggle('translate-x-full');
+                panel.classList.toggle('translate-x-0');
+              }
+            }}
+          >
+            {/* Icône d'engrenage */}
+            ouverure
+          </button>
             <div className="flex items-center space-x-2 mt-2">
               <div className={`w-3 h-3 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
               <span className="text-sm font-medium text-gray-600">
