@@ -25,7 +25,7 @@ function App() {
           onSpeechEnd={handleSpeechEnd}
           onVolumeChange={handleVolumeChange}
           silenceThreshold={0.01}
-          silenceTimeout={800}
+          silenceTimeout={400}
           minSpeechDuration={200}
         />
       </div>
