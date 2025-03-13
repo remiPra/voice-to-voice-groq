@@ -772,7 +772,7 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
           <div className="bg-white p-4 border-b shadow-sm">
             <h1 className="text-xl font-bold text-gray-800">Assistant Médical</h1>
             <button 
-            className="fixed right-12 z-55 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
+            className=" bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
             onClick={() => {
               const panel = document.getElementById('techPanel');
               if (panel) {
