@@ -42,9 +42,13 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
   const [isListening, setIsListening] = useState<boolean>(false);
   const [speechBooleanState, setSpeechBooleanState] = useState<number>(0);
   const [speechEndCount, setSpeechEndCount] = useState<number>(0);
+  // @ts-ignore
   const [lastEndTime, setLastEndTime] = useState<string>("");
+    // @ts-ignore
+
   const [endNotification, setEndNotification] = useState<boolean>(false);
-  
+    // @ts-ignore
+
   const [recordingEnded, setRecordingEnded] = useState(false);
   const [transcriptions, setTranscriptions] = useState<{ id: string; text: string; timestamp: string }[]>([]);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
