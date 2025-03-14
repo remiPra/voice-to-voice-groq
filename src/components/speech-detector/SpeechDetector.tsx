@@ -34,7 +34,8 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
   onSpeechEnd,
   onVolumeChange,
   silenceThreshold = 0.01, // Valeur par défaut plus basse
-  silenceTimeout = 500,
+  // silenceTimeout = 500,
+  silenceTimeout = 300,
   minSpeechDuration = 100, // Réduit à 100ms au lieu de 200ms
 }) => {
   const [volume, setVolume] = useState<number>(0);
@@ -57,7 +58,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
   const [threshold, setThreshold] = useState<number>(silenceThreshold);
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
   const [calibrationProgress, setCalibrationProgress] = useState<number>(0);
-  
+  const [allowInterruption, setAllowInterruption] = useState<boolean>(false);
   // Nouvelles références pour la calibration
   const noiseFloorRef = useRef<number[]>([]);
   const calibrationTimeRef = useRef<number | null>(null);
@@ -198,7 +199,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
         const systemPrompt = {
           role: "system",
           content:
-            "Adopte le rôle d'un super psychologue, utilise un ton conversationnel, réponds en une phrase d'environ 60 mots maximum à chaque fois pas plus.",
+          `Adopte le role de dieu , le connaisseur universel . reponse en maximum 80 mots`
         };
         messageHistory.current = [systemPrompt];
       }
@@ -228,7 +229,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
           },
           body: JSON.stringify({
             messages: messageHistory.current,
-            model: "gemma2-9b-it",
+            model: "llama-3.1-8b-instant",
             // model: "llama3-70b-8192",
           }),
         }
@@ -284,38 +285,65 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text, voice: "fr-FR-DeniseNeural" }),
       });
-
+  
       if (!response.ok) {
         throw new Error("Échec de la génération de l'audio.");
       }
-
+  
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      // Ajouter l'URL à notre liste
       setAudioUrls(prev => [...prev, audioUrl]);
-
-      // Créer un élément <audio> et l'ajouter au DOM
+  
       const audio = document.createElement("audio");
       audio.src = audioUrl;
       audio.controls = true;
       document.body.appendChild(audio);
-
+  
+      // Indiquer que l'audio est en cours de lecture
+      setIsAudioPlaying(true);
+      
       // Lecture automatique
       audio.play();
-
-      // Arrêter l'audio quand l'utilisateur commence à parler
-      const observer = new MutationObserver(() => {
-        if (speechBooleanStateRef.current === 1) {
-          if (!audio.paused) {
-            audio.pause();
-            audio.currentTime = 0;
+  
+      // Si l'interruption est autorisée, ajouter un observateur
+      if (allowInterruption) {
+        const observer = new MutationObserver(() => {
+          if (speechBooleanStateRef.current === 1) {
+            if (!audio.paused) {
+              audio.pause();
+              audio.currentTime = 0;
+              setIsAudioPlaying(false);
+            }
           }
+        });
+        observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+        
+        // Nettoyer l'observateur quand l'audio se termine
+        audio.onended = () => {
+          observer.disconnect();
+          setIsAudioPlaying(false);
+        };
+      } else {
+        // Si l'interruption n'est pas autorisée, désactiver l'enregistrement pendant la lecture
+        const wasRecording = isRecordingRef.current;
+        if (wasRecording) {
+          stopRecording();
         }
-      });
-      observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+        
+        // Réactiver l'enregistrement une fois l'audio terminé
+        audio.onended = () => {
+          setIsAudioPlaying(false);
+          if (wasRecording && isListening) {
+            setTimeout(() => {
+              if (isListening) startRecording();
+            }, 300);
+          }
+        };
+      }
     } catch (error) {
       console.error("Erreur lors de la lecture du TTS:", error);
+      setIsAudioPlaying(false);
     }
   };
 //   const speakResponse = async (text: string) => {
@@ -621,11 +649,17 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
           return;
         }
         
+        // Si l'audio est en cours de lecture et que l'interruption n'est pas autorisée, 
+        // ne pas traiter la détection vocale
+        if (isAudioPlaying && !allowInterruption) {
+          return;
+        }
+        
         // Appliquer le lissage exponentiel
         const smoothedVolume = smoothVolume(rawVolume);
         setVolume(smoothedVolume);
         if (onVolumeChange) onVolumeChange(smoothedVolume);
-
+      
         // Vérifier les fréquences pour s'assurer qu'il s'agit de voix humaine
         if (analyserRef.current && frequencyDataRef.current) {
           analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
@@ -642,18 +676,18 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
           if (firstSpeechDetectedRef.current) {
             currentThreshold = threshold * 0.8; // 20% plus sensible après la première détection
           }
-
+      
           const now = Date.now();
-
+      
           if (smoothedVolume > currentThreshold && hasVoiceFrequency) {
             silenceCountRef.current = 0;
-
+      
             // Si la parole reprend pendant la période de grâce, annuler le timeout
             if (graceTimeoutRef.current) {
               clearTimeout(graceTimeoutRef.current);
               graceTimeoutRef.current = null;
             }
-
+      
             if (silenceTimerRef.current) {
               clearTimeout(silenceTimerRef.current);
               silenceTimerRef.current = null;
@@ -662,7 +696,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
               clearTimeout(silenceAlertTimerRef.current);
               silenceAlertTimerRef.current = null;
             }
-
+      
             if (!isSpeaking) {
               if (!speechStartTimeRef.current) {
                 speechStartTimeRef.current = now;
@@ -676,11 +710,11 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
                     setSpeechBooleanState(1);
                     hasSpokeRef.current = true;
                     firstSpeechDetectedRef.current = true;
-
+      
                     if (!isRecordingRef.current && streamRef.current) {
                       startRecording();
                     }
-
+      
                     if (onSpeechStart) onSpeechStart();
                     speechValidationRef.current = null;
                   }, validationDelay);
@@ -693,9 +727,9 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
               clearTimeout(speechValidationRef.current);
               speechValidationRef.current = null;
             }
-
+      
             silenceCountRef.current += 1;
-
+      
             // Arrêt de l'enregistrement après une période de silence
             // Différence: moins de silence nécessaire pour arrêter si on a déjà parlé
             const silenceThreshold = firstSpeechDetectedRef.current ? 40 : 50;
@@ -709,7 +743,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
                   }
                   silenceCountRef.current = 0;
                   graceTimeoutRef.current = null;
-                }, 1000); // 1 seconde de grâce pour les pauses
+                }, 500); // 500ms de grâce pour les pauses
               }
             }
           }
@@ -775,7 +809,8 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
     firstSpeechDetectedRef.current = false;
     volumeHistory.current = [];
   };
-
+// @ts-ignore
+  const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(false);
   const [inputText, setInputText] = useState<string>("");
 
   const handleTextSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -948,6 +983,8 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
         {/* Panneau technique latéral - collapsible */}
         <div className="fixed top-0 right-0 h-full">
           {/* Bouton pour ouvrir/fermer le panneau */}
+          {/* Dans la zone des contrôles ou le panneau technique */}
+
           <button 
             className="fixed right-12 z-55 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
             onClick={() => {
@@ -973,7 +1010,31 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
             <div className="p-4 bg-gray-800 text-white">
               <h2 className="text-lg font-bold">Panneau Technique</h2>
             </div>
-  
+            <div className="p-4 border-b">
+  <h3 className="text-md font-semibold mb-2">Options de conversation</h3>
+  <div className="flex items-center">
+    <label className="flex items-center cursor-pointer">
+      <div className="relative">
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={allowInterruption}
+          onChange={() => setAllowInterruption(!allowInterruption)}
+        />
+        <div className={`block w-14 h-8 rounded-full ${allowInterruption ? 'bg-green-400' : 'bg-gray-300'}`}></div>
+        <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition ${allowInterruption ? 'transform translate-x-6' : ''}`}></div>
+      </div>
+      <div className="ml-3 text-sm font-medium">
+        {allowInterruption ? "Interruption autorisée" : "Pas d'interruption"}
+      </div>
+    </label>
+  </div>
+  <p className="text-xs text-gray-500 mt-1">
+    {allowInterruption 
+      ? "L'assistant s'arrêtera de parler quand vous commencerez à parler" 
+      : "L'assistant finira de parler même si vous commencez à parler"}
+  </p>
+</div>
             {/* Calibration */}
             <div className="p-4 border-b">
               <h3 className="text-md font-semibold mb-2">Calibration Microphone</h3>
