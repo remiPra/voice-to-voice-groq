@@ -228,7 +228,8 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
           },
           body: JSON.stringify({
             messages: messageHistory.current,
-            model: "llama3-70b-8192",
+            model: "gemma2-9b-it",
+            // model: "llama3-70b-8192",
           }),
         }
       );
