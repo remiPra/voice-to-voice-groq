@@ -86,6 +86,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
   
   // Nouvel état pour stocker les URLs des audios générés
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
+  const FILTERED_TRANSCRIPTIONS = ["merci","Merci","Oui", "...", "silence", "radio canada"];
 
   useEffect(() => {
     speechBooleanStateRef.current = speechBooleanState;
@@ -194,35 +195,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
         const systemPrompt = {
           role: "system",
           content:
-            `Tu es un médecin expérimenté. Ta mission est d'apporter des réponses claires, concises et adaptées au niveau de compréhension de ton interlocuteur. Adopte un ton conversationnel, bienveillant et accessible.  
-
-### 🏥 **Principes de réponse** :  
-- **Précision et concision** : Réponds directement à la question sans digressions inutiles.  
-- **Simplicité** : Explique avec des mots compréhensibles, sans jargon excessif.  
-- **Interactivité** : Pose des questions si nécessaire pour mieux cerner le problème avant de répondre.  
-- **Structuration efficace** : Réponds en 3 étapes :
-  1. **Identification du problème** → Résume en une phrase la situation.  
-  2. **Analyse rapide** → Évoque les causes possibles en quelques mots.  
-  3. **Action recommandée** → Indique une mesure immédiate et si une consultation est nécessaire.  
-
-### 🔍 **Méthodologie d’analyse** :  
-1. **Comprendre la demande** : Si les informations sont insuffisantes, pose une question simple avant de répondre.  
-2. **Évaluer rapidement** : Propose une hypothèse courte et indique les signes nécessitant un avis médical.  
-3. **Donner un conseil clair** : Privilégie une phrase simple pour l’orientation.  
-
-### 📌 **Exemple de réponse optimisée** :
-#### **Cas : Douleur lombaire aiguë irradiant dans la jambe**  
-👩‍⚕️ *Réponse courte et efficace* :  
-"La douleur pourrait être due à une sciatique ou une contracture musculaire. Depuis combien de temps cela dure-t-il ? Si la douleur persiste ou s’accompagne de perte de force ou d’engourdissements, une consultation est nécessaire. En attendant, évite de rester assis longtemps et applique du chaud."  
-
-💎 **Pourquoi cette version est-elle meilleure ?**  
-✅ **Réponses courtes et percutantes**  
-✅ **Moins de détails inutiles mais toujours précises**  
-✅ **Interactivité préservée avec des questions ciblées**  
-✅ **Facile à lire et comprendre**  
-
-Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot, format bullet points, etc.), dis-moi ! 💎
-`,
+            `adopt ele role de dieu et reponds avec une maniere conversationelle , une phrase pas plus de 20 mots pour me repondre `,
         };
         messageHistory.current = [systemPrompt];
       }
@@ -379,16 +352,35 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
 
       // Lecture automatique
       audio.play();
+       // Variable pour suivre le délai de validation
+    let speechStartTimeout: number | null = null;
+    
+    // Fonction pour arrêter l'audio
+    const stopAudioOnSpeech = () => {
+      if (!audio.paused) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    };
 
       // Arrêter l'audio quand l'utilisateur commence à parler
-      const observer = new MutationObserver(() => {
-        if (speechBooleanStateRef.current === 1) {
-          if (!audio.paused) {
-            audio.pause();
-            audio.currentTime = 0;
-          }
+       // Observer avec délai de validation
+    const observer = new MutationObserver(() => {
+      if (speechBooleanStateRef.current === 1) {
+        if (!speechStartTimeout) {
+          speechStartTimeout = window.setTimeout(() => {
+            stopAudioOnSpeech();
+            speechStartTimeout = null;
+          }, 500); // Exige 500ms de parole continue
         }
-      });
+      } else {
+        // Réinitialiser le timeout si la parole s'arrête
+        if (speechStartTimeout) {
+          clearTimeout(speechStartTimeout);
+          speechStartTimeout = null;
+        }
+      }
+    });
       observer.observe(document.body, { attributes: true, childList: true, subtree: true });
     } catch (error) {
       console.error("Erreur lors de la lecture du TTS:", error);
@@ -462,6 +454,10 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
 
       if (transcription && transcription.text) {
         const transcriptionText = transcription.text.trim();
+        const shouldIgnore = FILTERED_TRANSCRIPTIONS.some(phrase => 
+            transcriptionText.toLowerCase() === phrase.toLowerCase()
+          );
+          
         setTranscriptions((prev) => [
           ...prev,
           {
@@ -471,7 +467,7 @@ Si tu veux encore plus de concision ou un format spécifique (ex : style chatbot
           },
         ]);
 
-        if (transcriptionText && !processing.current) {
+        if (transcriptionText && !processing.current && !shouldIgnore) {
           await handleMessageSubmission(transcriptionText);
         }
       }
