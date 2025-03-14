@@ -45,7 +45,7 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
     // @ts-ignore
 
   const [lastEndTime, setLastEndTime] = useState<string>("");
-  // @ts-ignore
+  // @ts-ignore   
 
   const [endNotification, setEndNotification] = useState<boolean>(false);
   // @ts-ignore
