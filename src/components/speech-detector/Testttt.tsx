@@ -291,17 +291,53 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
 
       // Lecture automatique
       audio.play();
+       // Variable pour suivre le délai de validation
+    let speechStartTimeout: number | null = null;
+    let isRealSpeech = false;  // Nouveau flag pour différencier la vraie parole des bruits
+    
+    // Fonction pour arrêter l'audio
+    const stopAudioOnSpeech = () => {
+      if (!audio.paused && isRealSpeech) {  // Vérifier si c'est une vraie parole
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    };
 
-      // Arrêter l'audio quand l'utilisateur commence à parler
-      const observer = new MutationObserver(() => {
-        if (speechBooleanStateRef.current === 1) {
-          if (!audio.paused) {
-            audio.pause();
-            audio.currentTime = 0;
-          }
+    // Observer avec délai de validation et vérification de la durée de parole
+    const observer = new MutationObserver(() => {
+      if (speechBooleanStateRef.current === 1) {
+        if (!speechStartTimeout) {
+          // Démarrer le timer pour déterminer si c'est une vraie parole
+          speechStartTimeout = window.setTimeout(() => {
+            // Si après 500ms, l'état de parole est toujours à 1, c'est probablement une vraie parole
+            if (speechBooleanStateRef.current === 1) {
+              isRealSpeech = true;
+              stopAudioOnSpeech();
+            }
+            speechStartTimeout = null;
+          }, 500);
         }
-      });
-      observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+      } else {
+        // Si l'état de parole revient à 0 avant la fin du délai, annuler et réinitialiser
+        if (speechStartTimeout) {
+          clearTimeout(speechStartTimeout);
+          speechStartTimeout = null;
+        }
+        isRealSpeech = false;  // Réinitialiser si ce n'était qu'un bruit court
+      }
+    });
+    
+    observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+    
+    // Nettoyage lorsque l'audio se termine
+    audio.onended = () => {
+      observer.disconnect();
+      if (speechStartTimeout) {
+        clearTimeout(speechStartTimeout);
+      }
+    };
+      // Arrêter l'audio quand l'utilisateur commence à parler
+     
     } catch (error) {
       console.error("Erreur lors de la lecture du TTS:", error);
     }

@@ -185,31 +185,39 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
   const handleMessageSubmission = async (content: string) => {
     if (processing.current) return;
     processing.current = true;
-
+  
     try {
       const userMessage: Message = {
         role: "user",
         content,
         timestamp: new Date().toLocaleTimeString(),
       };
-
+  
+      // Ajouter au message history
       if (messageHistory.current.length === 0) {
         const systemPrompt = {
           role: "system",
           content:
-            "Adopte le rôle d'un super psychologue, utilise un ton conversationnel, réponds en une phrase d'environ 20 mots maximum à chaque fois pas plus.",
+            "Adopte le rôle d'un super psychologue, utilise un ton conversationnel, réponds en une phrase d'environ 60 mots maximum à chaque fois pas plus.",
         };
         messageHistory.current = [systemPrompt];
       }
-
+  
       messageHistory.current = [
         ...messageHistory.current,
         { role: "user", content },
       ];
-
+  
       setMessages((prev) => [...prev, userMessage]);
       setError("");
-
+  
+      // Jouer un son d'attente
+      const waitingAudio = new Audio("/no_input.mp3"); // Remplace par le chemin vers ton son
+      waitingAudio.loop = true; // Pour que le son se répète tant que la réponse n'est pas prête
+      waitingAudio.volume = 0.3; // Volume plus bas pour ne pas être trop intrusif
+      waitingAudio.play();
+  
+      // Appel API
       const response = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
         {
@@ -224,14 +232,18 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
           }),
         }
       );
-
+  
+      // Arrêter le son d'attente
+      waitingAudio.pause();
+      waitingAudio.currentTime = 0;
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error?.message || "Erreur API");
       }
-
+  
       const data: GroqResponse = await response.json();
-
+  
       if (data.choices?.[0]?.message?.content) {
         const assistantContent = data.choices[0].message.content;
         const assistantMessage: Message = {
@@ -239,18 +251,18 @@ const SpeechDetector: React.FC<SpeechDetectorProps> = ({
           content: assistantContent,
           timestamp: new Date().toLocaleTimeString(),
         };
-
+  
         messageHistory.current = [
           ...messageHistory.current,
           { role: "assistant", content: assistantContent },
         ];
         setMessages((prev) => [...prev, assistantMessage]);
         scrollToBottom();
-
+  
         if (messageHistory.current.length > 20) {
           messageHistory.current = messageHistory.current.slice(-20);
         }
-
+  
         if (typeof speakResponse === "function") {
           speakResponse(assistantContent);
         }
