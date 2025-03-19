@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { audioContext } from "../../lib/utils/audio-context";
 import VolMeterWorket from "../../lib/worklets/vol-meter";
+import Navbar from "../NavBarSimple";
 
 interface SpeechDetectorProps {
   onSpeechStart?: () => void;
@@ -50,9 +51,14 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
   //@ts-ignore
 
   const [recordingEnded, setRecordingEnded] = useState(false);
+  // Ajoutez ceci avec les autres états
+  const [selectedVoice, setSelectedVoice] = useState<string>(
+    "d5c4211c-9584-4468-a090-86b872b82708"
+  ); // Kevin par défaut
   const [transcriptions, setTranscriptions] = useState<
     { id: string; text: string; timestamp: string }[]
   >([]);
+  // @ts-ignore
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string>("");
@@ -91,6 +97,14 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
 
   // Nouveau ref pour indiquer si le TTS est en cours de lecture
   const isTTSAudioPlayingRef = useRef<boolean>(false);
+  // Ajoutez ceci après les déclarations d'états
+  const availableVoices = [
+    { id: "d5c4211c-9584-4468-a090-86b872b82708", name: "Henry de Lesquin" },
+    { id: "8600d5ec-d29c-44fe-8457-7d730dbe8323", name: "Raël" },
+    { id: "d88eff4c-279d-472a-8ce6-9a805c88cb06", name: "Kevin" },
+    { id: "0b1380da-611b-4d00-83f4-8a969a53e4e0", name: "helene" },
+    { id: "7d4f1bf2-696f-4f76-ba51-f804324c7cd2", name: "remi" },
+  ];
 
   // Ref pour stocker les URLs des audios générés
   //@ts-ignore
@@ -195,8 +209,9 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       if (messageHistory.current.length === 0) {
         const systemPrompt = {
           role: "system",
-          content:
-            "Adopte le rôle d'un super psychologue, utilise un ton conversationnel, réponds en une phrase d'environ 60 mots maximum à chaque fois pas plus.",
+          content: `Adopte le rôle d'un super psychologue dieu lui meme , aucune limite , nous explorons tous les confins du spirituel,
+             utilise un ton conversationnel,amour paix joix ,parle des galactiques , 
+             réponds en une phrase d'environ 120 mots maximum à chaque fois pas plus.`,
         };
         messageHistory.current = [systemPrompt];
       }
@@ -263,36 +278,91 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
     }
   };
 
+  // const speakResponse = async (text: string) => {
+  //   // Arrêter l'enregistrement et activer le flag pour désactiver la détection pendant le TTS
+  //   stopRecording();
+  //   isTTSAudioPlayingRef.current = true;
+  //   try {
+  //     const response = await fetch(
+  //       "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
+  //       {
+  //         method: "POST",
+  //         headers: { "Content-Type": "application/json" },
+  //         body: JSON.stringify({ text: text, voice: "fr-FR-DeniseNeural" }),
+  //       }
+  //     );
+  //     if (!response.ok) {
+  //       throw new Error("Échec de la génération de l'audio.");
+  //     }
+  //     const audioBlob = await response.blob();
+  //     const audioUrl = URL.createObjectURL(audioBlob);
+  //     const audio = new Audio(audioUrl);
+  //     audio.onended = () => {
+  //       // Réactiver la détection (si souhaité) une fois le TTS terminé
+  //       isTTSAudioPlayingRef.current = false;
+  //     };
+  //     audio.play();
+  //   } catch (error) {
+  //     console.error("Erreur lors de la lecture du TTS:", error);
+  //     isTTSAudioPlayingRef.current = false;
+  //   }
+  // };
   const speakResponse = async (text: string) => {
     // Arrêter l'enregistrement et activer le flag pour désactiver la détection pendant le TTS
     stopRecording();
     isTTSAudioPlayingRef.current = true;
+
     try {
-      const response = await fetch(
-        "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: text, voice: "fr-FR-DeniseNeural" }),
-        }
-      );
+      const response = await fetch("https://api.cartesia.ai/tts/bytes", {
+        method: "POST",
+        headers: {
+          "Cartesia-Version": "2024-06-10",
+          "X-API-Key": import.meta.env.VITE_SYNTHESIA,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model_id: "sonic-2",
+          transcript: text,
+          voice: {
+            mode: "id",
+            id: selectedVoice, // Utiliser la voix sélectionnée
+          },
+          output_format: {
+            container: "mp3",
+            bit_rate: 128000,
+            sample_rate: 44100,
+          },
+          language: "fr",
+        }),
+      });
+
       if (!response.ok) {
-        throw new Error("Échec de la génération de l'audio.");
+        throw new Error(
+          `Échec de la génération de l'audio: ${response.status}`
+        );
       }
+
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
+
+      // Ajouter l'URL à la liste des audios générés
+      setAudioUrls((prev) => [...prev, audioUrl]);
+
       const audio = new Audio(audioUrl);
+
       audio.onended = () => {
-        // Réactiver la détection (si souhaité) une fois le TTS terminé
+        // Réactiver la détection une fois le TTS terminé
         isTTSAudioPlayingRef.current = false;
+        // Libérer l'URL de l'objet pour éviter les fuites de mémoire
+        URL.revokeObjectURL(audioUrl);
       };
-      audio.play();
+
+      await audio.play();
     } catch (error) {
       console.error("Erreur lors de la lecture du TTS:", error);
       isTTSAudioPlayingRef.current = false;
     }
   };
-
   const sendAudioForTranscription = async (
     audioBlob: Blob
   ): Promise<TranscriptionResult | null> => {
@@ -631,25 +701,253 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       setInputText("");
     }
   };
-
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden relative">
-      {/* Contenu principal */}
-      <div className="w-full flex flex-col h-full">
-        <div className="bg-white p-4 border-b shadow-sm">
-          <h1 className="text-xl font-bold text-gray-800">Assistant Médical</h1>
-          <button
-            onClick={toggleListening}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-              isListening
-                ? "bg-red-500 hover:bg-red-600 text-white"
-                : "bg-green-500 hover:bg-green-600 text-white"
-            }`}
+    <>
+      <div className="flex h-screen bg-[#f5f7fa] overflow-hidden relative font-['Poppins',sans-serif]">
+        {/* Contenu principal */}
+        <div className="w-full flex flex-col h-full">
+          <div className="bg-[#0a2463] p-5 shadow-lg">
+            <div className="flex justify-between items-center">
+              <h1 className="hidden md:block text-2xl font-['Montserrat',sans-serif] font-bold text-white tracking-tight">
+                <span className="text-[#ff9000]">Chat</span>Assistant
+              </h1>
+              <Navbar />
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={toggleListening}
+                  className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                    isListening
+                      ? "bg-[#e63946] text-white shadow-lg"
+                      : "bg-[#3d9970] text-white shadow-lg"
+                  }`}
+                >
+                  {isListening ? "Arrêter l'écoute" : "Commencer l'écoute"}
+                </button>
+                <button
+                  className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
+                  onClick={() => {
+                    const panel = document.getElementById("techPanel");
+                    if (panel) {
+                      panel.classList.toggle("translate-x-full");
+                      panel.classList.toggle("translate-x-0");
+                    }
+                  }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {/* <div className="flex items-center space-x-3 mt-3">
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  isListening ? "bg-[#ff9000] animate-pulse" : "bg-gray-400"
+                }`}
+              ></div>
+              <span className="text-sm font-medium text-white/90">
+                {isListening ? "Microphone actif" : "Microphone inactif"}
+              </span>
+              {isTranscribing && (
+                <span className="text-xs bg-[#ff9000] text-[#0a2463] px-3 py-1 rounded-full ml-2 animate-pulse font-medium">
+                  Transcription en cours...
+                </span>
+              )}
+              {isListening && !isCalibrating && (
+                <button
+                  onClick={calibrateMicrophone}
+                  className="ml-auto px-3 py-1.5 rounded-md font-medium bg-[#1e3a8a] hover:bg-[#2a4494] text-white transition-all duration-300 shadow-md"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 inline-block mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  Calibrer
+                </button>
+              )}
+            </div> */}
+          </div>
+
+          <div
+            className="flex-grow overflow-y-auto p-6 bg-[#f5f7fa]"
+            style={{
+              scrollBehavior: "smooth",
+              backgroundImage:
+                "url('https://www.transparenttextures.com/patterns/cubes.png')",
+            }}
           >
-            {isListening ? "Arrêter l'écoute" : "Commencer l'écoute"}
-          </button>
+            {error && (
+              <div className="p-4 mb-4 bg-[#e63946] text-white rounded-lg border border-red-600 shadow-lg">
+                {error}
+              </div>
+            )}
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`p-5 my-3 rounded-2xl max-w-[80%] shadow-md transition-all duration-300 hover:shadow-lg ${
+                  msg.role === "user"
+                    ? "bg-[#0a2463] text-white ml-auto"
+                    : "bg-white border border-gray-200 text-[#0a2463]"
+                }`}
+                style={{
+                  position: "relative",
+                  ...(msg.role !== "user" && {
+                    "&:before": {
+                      content: '""',
+                      position: "absolute",
+                      top: "20px",
+                      left: "-10px",
+                      border: "10px solid transparent",
+                      borderRight: "10px solid white",
+                    },
+                  }),
+                  ...(msg.role === "user" && {
+                    "&:before": {
+                      content: '""',
+                      position: "absolute",
+                      top: "20px",
+                      right: "-10px",
+                      border: "10px solid transparent",
+                      borderLeft: "10px solid #0a2463",
+                    },
+                  }),
+                }}
+              >
+                <div className="flex justify-between mb-2">
+                  <span
+                    className={`text-xs font-bold ${
+                      msg.role === "user" ? "text-[#ff9000]" : "text-[#1e3a8a]"
+                    }`}
+                  >
+                    {msg.role === "user" ? "Vous" : "Assistant"}
+                  </span>
+                  <span className="text-xs text-gray-500">{msg.timestamp}</span>
+                </div>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">
+                  {msg.content}
+                </p>
+              </div>
+            ))}
+            <div ref={messagesEndRef}></div>
+          </div>
+
+          <form
+            onSubmit={handleTextSubmit}
+            className="bg-white border-t border-gray-200 p-4 shadow-md"
+          >
+            <div className="flex items-center">
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="Écrivez votre message..."
+                className="flex-grow px-5 py-3 bg-[#f5f7fa] border border-gray-300 rounded-l-full text-[#0a2463] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-transparent"
+                disabled={processing.current}
+              />
+              <button
+                type="submit"
+                className="bg-[#0a2463] hover:bg-[#1e3a8a] text-white px-6 py-3 rounded-r-full transition-all duration-300 shadow-md"
+                disabled={processing.current || !inputText.trim()}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </div>
+          </form>
+
+          <div className="bg-[#0a2463] p-4 shadow-inner">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <div
+                  className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                    isSpeaking
+                      ? "bg-[#3d9970] text-white animate-pulse shadow-lg"
+                      : "bg-gray-700 text-gray-300"
+                  }`}
+                >
+                  {isSpeaking ? "🎤" : "🔇"}
+                </div>
+                <span className="text-sm font-medium text-white">
+                  {isSpeaking
+                    ? "Parole détectée"
+                    : isListening
+                    ? "En attente de parole..."
+                    : "Microphone désactivé"}
+                </span>
+              </div>
+              <button
+                onClick={toggleListening}
+                className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                  isListening
+                    ? "bg-[#e63946] text-white shadow-lg"
+                    : "bg-[#3d9970] text-white shadow-lg"
+                }`}
+              >
+                {isListening ? "Arrêter l'écoute" : "Commencer l'écoute"}
+              </button>
+            </div>
+            <div className="w-full h-3 bg-[#1e3a8a] rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-100 ${
+                  isSpeaking
+                    ? "bg-[#3d9970]"
+                    : isListening
+                    ? "bg-[#ff9000]"
+                    : "bg-gray-600"
+                }`}
+                style={{ width: `${Math.min(volume * 200, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="fixed top-0 right-0 h-full">
           <button
-            className=" bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
+            className="fixed right-12 z-50 top-1/2 transform -translate-y-1/2 bg-[#0a2463] text-white p-3 rounded-l-lg shadow-lg hover:bg-[#1e3a8a] transition-all duration-300"
             onClick={() => {
               const panel = document.getElementById("techPanel");
               if (panel) {
@@ -679,337 +977,212 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
               />
             </svg>
           </button>
-          {isListening && !isCalibrating && (
-            <button
-              onClick={calibrateMicrophone}
-              className="px-3 py-2 rounded-md font-medium bg-yellow-400 hover:bg-yellow-500 text-white"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>{" "}
-            </button>
-          )}
-          <div className="flex items-center space-x-2 mt-2">
-            <div
-              className={`w-3 h-3 rounded-full ${
-                isListening ? "bg-green-500 animate-pulse" : "bg-gray-400"
-              }`}
-            ></div>
-            <span className="text-sm font-medium text-gray-600">
-              {isListening ? "Microphone actif" : "Microphone inactif"}
-            </span>
-            {isTranscribing && (
-              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full ml-2">
-                Transcription en cours...
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div
-          className="flex-grow overflow-y-auto p-4 bg-gray-50"
-          style={{ scrollBehavior: "smooth" }}
-        >
-          {error && (
-            <div className="p-3 mb-3 bg-red-50 text-red-700 rounded border border-red-200">
-              {error}
-            </div>
-          )}
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`p-4 my-2 rounded-lg max-w-[80%] shadow-sm ${
-                msg.role === "user"
-                  ? "bg-blue-100 ml-auto"
-                  : "bg-white border border-gray-200"
-              }`}
-            >
-              <div className="flex justify-between mb-1">
-                <span
-                  className={`text-xs font-bold ${
-                    msg.role === "user" ? "text-blue-700" : "text-gray-700"
-                  }`}
-                >
-                  {msg.role === "user" ? "Vous" : "Assistant Médical"}
-                </span>
-                <span className="text-xs text-gray-500">{msg.timestamp}</span>
-              </div>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {msg.content}
-              </p>
-            </div>
-          ))}
-          <div ref={messagesEndRef}></div>
-        </div>
-        <form onSubmit={handleTextSubmit} className="bg-white border-t p-4">
-          <div className="flex items-center mb-3">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Écrivez votre message..."
-              className="flex-grow px-4 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-              disabled={processing.current}
-            />
-            <button
-              type="submit"
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-r-lg"
-              disabled={processing.current || !inputText.trim()}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-          </div>
-        </form>
-
-        <div className="bg-white border-t p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                  isSpeaking
-                    ? "bg-green-500 text-white animate-pulse"
-                    : "bg-gray-200 text-gray-700"
-                }`}
-              >
-                {isSpeaking ? "🎤" : "🔇"}
-              </div>
-              <span className="text-sm font-medium">
-                {isSpeaking
-                  ? "Parole détectée"
-                  : isListening
-                  ? "En attente de parole..."
-                  : "Microphone désactivé"}
-              </span>
-            </div>
-            <button
-              onClick={toggleListening}
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-                isListening
-                  ? "bg-red-500 hover:bg-red-600 text-white"
-                  : "bg-green-500 hover:bg-green-600 text-white"
-              }`}
-            >
-              {isListening ? "Arrêter l'écoute" : "Commencer l'écoute"}
-            </button>
-          </div>
-          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-100 ${
-                isSpeaking
-                  ? "bg-green-500"
-                  : isListening
-                  ? "bg-blue-400"
-                  : "bg-gray-400"
-              }`}
-              style={{ width: `${Math.min(volume * 200, 100)}%` }}
-            ></div>
-          </div>
-        </div>
-      </div>
-      <div className="fixed top-0 right-0 h-full">
-        <button
-          className="fixed right-12 z-55 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-l-lg shadow-md"
-          onClick={() => {
-            const panel = document.getElementById("techPanel");
-            if (panel) {
-              panel.classList.toggle("translate-x-full");
-              panel.classList.toggle("translate-x-0");
-            }
-          }}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+          <div
+            id="techPanel"
+            className="w-full md:w-96 h-full bg-white border-l border-gray-200 shadow-2xl overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-            />
-          </svg>
-        </button>
-        <div
-          id="techPanel"
-          className="w-96 h-full bg-white border-l shadow-lg overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
-        >
-          <div className="p-4 bg-gray-800 text-white">
-            <h2 className="text-lg font-bold">Panneau Technique</h2>
-          </div>
-          <div className="p-4 border-b">
-            <h3 className="text-md font-semibold mb-2">
-              Calibration Microphone
-            </h3>
-            <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Seuil de détection: {threshold.toFixed(4)}
-                {autoThresholdRef.current !== threshold &&
-                  " (Ajusté manuellement)"}
-              </label>
-              <input
-                type="range"
-                min="0.001"
-                max="0.1"
-                step="0.001"
-                value={threshold}
-                onChange={handleThresholdChange}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
+            <div className="p-5 bg-[#0a2463] text-white">
+              <h2 className="text-lg font-bold font-['Montserrat',sans-serif]">
+                Panneau Technique
+              </h2>
             </div>
-            {isListening && !isCalibrating && (
-              <button
-                onClick={calibrateMicrophone}
-                className="w-full px-3 py-2 rounded-md font-medium bg-yellow-400 hover:bg-yellow-500 text-white"
-              >
-                Recalibrer microphone
-              </button>
-            )}
-            {isCalibrating && (
-              <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                <div
-                  className="bg-yellow-400 h-2.5 rounded-full"
-                  style={{ width: `${calibrationProgress}%` }}
-                ></div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Calibration: {calibrationProgress.toFixed(0)}%
-                </p>
-              </div>
-            )}
-          </div>
-          <div className="p-4 border-b">
-            <h3 className="text-md font-semibold mb-2">États de détection</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <div className="text-xs font-medium mb-1">État de parole:</div>
-                <div className="flex justify-center">
-                  <span
-                    className={`w-10 h-10 flex items-center justify-center text-xl font-bold rounded-full ${
-                      speechBooleanState === 1
-                        ? "bg-green-500 text-white"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    {speechBooleanState}
-                  </span>
-                </div>
-              </div>
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <div className="text-xs font-medium mb-1">Fins de parole:</div>
-                <div className="flex justify-center">
-                  <span className="w-10 h-10 flex items-center justify-center text-xl font-bold rounded-full bg-purple-500 text-white">
-                    {speechEndCount}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="p-4 border-b">
-            <h3 className="text-md font-semibold mb-2">Transcriptions</h3>
-            {transcriptions.length === 0 ? (
-              <p className="text-gray-500 italic text-sm">
-                Aucune transcription pour le moment
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {transcriptions.map((trans) => (
-                  <div
-                    key={trans.id}
-                    className="p-2 bg-gray-50 border rounded text-sm"
-                  >
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs font-medium">Transcription</span>
-                      <span className="text-xs text-gray-500">
-                        {trans.timestamp}
-                      </span>
-                    </div>
-                    <p>{trans.text}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="p-4 border-b">
-            <h3 className="text-md font-semibold mb-2">Audios générés</h3>
-            {audioUrls.length === 0 ? (
-              <p className="text-gray-500 italic text-sm">
-                Aucun audio généré pour le moment
-              </p>
-            ) : (
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
+                Sélection de voix
+              </h3>
               <div className="space-y-2">
-                {audioUrls.map((url, index) => (
-                  <div key={index} className="mb-2">
-                    <audio src={url} controls className="w-full h-8" />
+                {availableVoices.map((voice) => (
+                  <div key={voice.id} className="flex items-center">
+                    <input
+                      type="radio"
+                      id={voice.id}
+                      name="voice"
+                      value={voice.id}
+                      checked={selectedVoice === voice.id}
+                      onChange={() => setSelectedVoice(voice.id)}
+                      className="mr-2 accent-[#0a2463]"
+                    />
+                    <label
+                      htmlFor={voice.id}
+                      className={`cursor-pointer ${
+                        selectedVoice === voice.id
+                          ? "text-[#0a2463] font-medium"
+                          : "text-gray-600"
+                      }`}
+                    >
+                      {voice.name}
+                    </label>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-          <div className="p-4 border-b">
-            <h3 className="text-md font-semibold mb-2">
-              Informations de débogage
-            </h3>
-            <div className="text-xs space-y-1 bg-gray-50 p-2 rounded">
-              <p>Volume actuel: {volume.toFixed(5)}</p>
-              <p>Seuil actuel: {threshold.toFixed(5)}</p>
-              <p>
-                Seuil après première détection: {(threshold * 0.8).toFixed(5)}
-              </p>
-              <p>
-                Première parole détectée:{" "}
-                {firstSpeechDetectedRef.current ? "Oui" : "Non"}
-              </p>
-              <p>Durée minimale parole: {minSpeechDuration}ms</p>
-              <p>Silence avant fin: {silenceTimeout}ms</p>
+
+              <button
+                onClick={() => {
+                  if (selectedVoice && !processing.current) {
+                    speakResponse(
+                      "Ceci est un test de la voix sélectionnée. Comment puis-je vous aider aujourd'hui?"
+                    );
+                  }
+                }}
+                className="mt-4 w-full bg-[#0a2463] hover:bg-[#1e3a8a] text-white py-2 px-4 rounded-lg transition-all duration-300 shadow-md"
+              >
+                Tester la voix
+              </button>
             </div>
-          </div>
-          <div className="p-4">
-            <button
-              onClick={resetCounters}
-              className="w-full px-3 py-2 rounded-md font-medium bg-gray-600 hover:bg-gray-700 text-white"
-            >
-              Réinitialiser les compteurs
-            </button>
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
+                Calibration Microphone
+              </h3>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Seuil de détection: {threshold.toFixed(4)}
+                  {autoThresholdRef.current !== threshold &&
+                    " (Ajusté manuellement)"}
+                </label>
+                <input
+                  type="range"
+                  min="0.001"
+                  max="0.1"
+                  step="0.001"
+                  value={threshold}
+                  onChange={handleThresholdChange}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              {isListening && !isCalibrating && (
+                <button
+                  onClick={calibrateMicrophone}
+                  className="w-full px-4 py-2.5 rounded-md font-medium bg-[#ff9000] hover:bg-[#e67e00] text-white transition-all duration-300 shadow-md"
+                >
+                  Recalibrer microphone
+                </button>
+              )}
+              {isCalibrating && (
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                  <div
+                    className="bg-[#ff9000] h-2.5 rounded-full"
+                    style={{ width: `${calibrationProgress}%` }}
+                  ></div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Calibration: {calibrationProgress.toFixed(0)}%
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
+                États de détection
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-gray-100 rounded-xl">
+                  <div className="text-xs font-medium mb-2 text-gray-700">
+                    État de parole:
+                  </div>
+                  <div className="flex justify-center">
+                    <span
+                      className={`w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full ${
+                        speechBooleanState === 1
+                          ? "bg-[#3d9970] text-white"
+                          : "bg-gray-300 text-gray-600"
+                      }`}
+                    >
+                      {speechBooleanState}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-4 bg-gray-100 rounded-xl">
+                  <div className="text-xs font-medium mb-2 text-gray-700">
+                    Fins de parole:
+                  </div>
+                  <div className="flex justify-center">
+                    <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-[#0a2463] text-white">
+                      {speechEndCount}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
+                Transcriptions
+              </h3>
+              {transcriptions.length === 0 ? (
+                <p className="text-gray-500 italic text-sm">
+                  Aucune transcription pour le moment
+                </p>
+              ) : (
+                <div className="space-y-3 max-h-40 overflow-y-auto">
+                  {transcriptions.map((trans) => (
+                    <div
+                      key={trans.id}
+                      className="p-3 bg-gray-100 border border-gray-200 rounded-lg text-sm"
+                    >
+                      <div className="flex justify-between mb-1">
+                        <span className="text-xs font-medium text-[#1e3a8a]">
+                          Transcription
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {trans.timestamp}
+                        </span>
+                      </div>
+                      <p className="text-gray-800">{trans.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
+                Audios générés
+              </h3>
+              {audioUrls.length === 0 ? (
+                <p className="text-gray-500 italic text-sm">
+                  Aucun audio généré pour le moment
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {audioUrls.map((url, index) => (
+                    <div key={index} className="mb-2">
+                      <audio
+                        src={url}
+                        controls
+                        className="w-full h-10 rounded-lg"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
+                Informations de débogage
+              </h3>
+              <div className="text-xs space-y-2 bg-gray-100 p-3 rounded-lg text-gray-700">
+                <p>Volume actuel: {volume.toFixed(5)}</p>
+                <p>Seuil actuel: {threshold.toFixed(5)}</p>
+                <p>
+                  Seuil après première détection: {(threshold * 0.8).toFixed(5)}
+                </p>
+                <p>
+                  Première parole détectée:{" "}
+                  {firstSpeechDetectedRef.current ? "Oui" : "Non"}
+                </p>
+                <p>Durée minimale parole: {minSpeechDuration}ms</p>
+                <p>Silence avant fin: {silenceTimeout}ms</p>
+              </div>
+            </div>
+            <div className="p-5">
+              <button
+                onClick={resetCounters}
+                className="w-full px-4 py-3 rounded-lg font-medium bg-[#0a2463] hover:bg-[#1e3a8a] text-white transition-all duration-300 shadow-md"
+              >
+                Réinitialiser les compteurs
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

@@ -16,9 +16,9 @@ function ChatSansInterruption() {
 
   return (
     <div className=" mx-auto">
-      <h1 className="text-3xl font-bold text-center mb-8">
+      {/* <h1 className="text-3xl font-bold text-center mb-8">
         Détecteur de Parole
-      </h1>
+      </h1> */}
       <div className="mx-auto">
         {/* <SpeechDetector 
           onSpeechStart={handleSpeechStart}
