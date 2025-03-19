@@ -73,7 +73,7 @@ const EpitactAI: React.FC = () => {
   const audioChunksRef = useRef<Blob[]>([]);
   const isRecordingRef = useRef<boolean>(false);
   const recordingTimerRef = useRef<number | null>(null);
-  const RECORDING_DURATION = 10000; // 10 secondes d'enregistrement
+  const RECORDING_DURATION = 6000; // 10 secondes d'enregistrement
 
   // Voix disponibles
   const availableVoices: VoiceInfo[] = [
@@ -480,7 +480,10 @@ const EpitactAI: React.FC = () => {
       });
 
       console.log("Réponse API complète:", res.data);
-
+      // Définir la réponse textuelle
+      const recommendationText =
+        res.data.recommendation || "Pas de réponse disponible.";
+      setResponse(recommendationText);
       // Définir la réponse textuelle
       setResponse(res.data.recommendation || "Pas de réponse disponible.");
 
@@ -507,6 +510,10 @@ const EpitactAI: React.FC = () => {
           });
         }
       }
+      // Lire la réponse à haute voix
+      setTimeout(() => {
+        speakText(recommendationText.replace(/<[^>]*>/g, ""));
+      }, 500);
     } catch (error) {
       console.error("Erreur API:", error);
       setResponse("Erreur lors de la communication avec le serveur.");
