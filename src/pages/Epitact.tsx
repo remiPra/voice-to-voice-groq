@@ -475,9 +475,12 @@ const EpitactAI: React.FC = () => {
     setIsLoading(true);
     try {
       console.log("Envoi API en cours...");
-      const res = await axios.post("http://127.0.0.1:5000/generate", {
-        message: formattedMessage,
-      });
+      const res = await axios.post(
+        "https://epitact-backend-9d6c8658f12e.herokuapp.com/generate",
+        {
+          message: formattedMessage,
+        }
+      );
 
       console.log("Réponse API complète:", res.data);
       // Définir la réponse textuelle
