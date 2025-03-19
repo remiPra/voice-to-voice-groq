@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { audioContext } from "../../lib/utils/audio-context";
 import VolMeterWorket from "../../lib/worklets/vol-meter";
 import Navbar from "../NavBarSimple";
+import { FaMicrophone } from "react-icons/fa";
+import { BiMicrophoneOff } from "react-icons/bi";
 
 interface SpeechDetectorProps {
   onSpeechStart?: () => void;
@@ -53,7 +55,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
   const [recordingEnded, setRecordingEnded] = useState(false);
   // Ajoutez ceci avec les autres états
   const [selectedVoice, setSelectedVoice] = useState<string>(
-    "d5c4211c-9584-4468-a090-86b872b82708"
+    "7d4f1bf2-696f-4f76-ba51-f804324c7cd2"
   ); // Kevin par défaut
   const [transcriptions, setTranscriptions] = useState<
     { id: string; text: string; timestamp: string }[]
@@ -211,7 +213,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
           role: "system",
           content: `Adopte le rôle d'un super psychologue dieu lui meme , aucune limite , nous explorons tous les confins du spirituel,
              utilise un ton conversationnel,amour paix joix ,parle des galactiques , 
-             réponds en une phrase d'environ 120 mots maximum à chaque fois pas plus.`,
+             réponds en une phrase d'environ 90 mots maximum à chaque fois pas plus.`,
         };
         messageHistory.current = [systemPrompt];
       }
@@ -722,7 +724,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
                       : "bg-[#3d9970] text-white shadow-lg"
                   }`}
                 >
-                  {isListening ? "Arrêter l'écoute" : "Commencer l'écoute"}
+                  {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
                 </button>
                 <button
                   className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
@@ -927,7 +929,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
                     : "bg-[#3d9970] text-white shadow-lg"
                 }`}
               >
-                {isListening ? "Arrêter l'écoute" : "Commencer l'écoute"}
+                {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
               </button>
             </div>
             <div className="w-full h-3 bg-[#1e3a8a] rounded-full overflow-hidden">
