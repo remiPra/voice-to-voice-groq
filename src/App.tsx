@@ -1,34 +1,26 @@
-// /app.tsx
-import SpeechDetector from './components/speech-detector/SpeechDetector';
-import './App.css';
+import { Routes, Route } from "react-router-dom";
+import Home from "./pages/Home";
+import ChatInterrupt from "./pages/Main";
+import ChatSansInterruption from "./pages/Help";
+import Navbar from "./components/NavBar";
+import ProductGallery from "./components/ProductGallery";
+import productsData from "../public/epitact.json"; // Ajoutez cette ligne
+import EpitactAI from "./pages/Epitact";
 
 function App() {
-  const handleSpeechStart = () => {
-    console.log("L'utilisateur a commencé à parler");
-  };
-
-  const handleSpeechEnd = () => {
-    console.log("L'utilisateur a fini de parler");
-  };
-    // @ts-ignore - Utilisé dans handleSpeechEnd mais pas dans le JSX
-  const handleVolumeChange = (volume: number) => {
-    // Vous pouvez limiter le nombre d'appels si nécessaire
-    // console.log("Volume actuel:", volume);
-  };
-
   return (
-    <div className=" mx-auto">
-      <h1 className="text-3xl font-bold text-center mb-8">Détecteur de Parole</h1>
-      <div className="mx-auto">
-        <SpeechDetector 
-          onSpeechStart={handleSpeechStart}
-          onSpeechEnd={handleSpeechEnd}
-          onVolumeChange={handleVolumeChange}
-          silenceThreshold={0.01}
-          silenceTimeout={400}
-          minSpeechDuration={200}
+    <div>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/chat" element={<ChatInterrupt />} />
+        <Route path="/chat2" element={<ChatSansInterruption />} />
+        <Route
+          path="/epitact"
+          element={<ProductGallery products={productsData} />}
         />
-      </div>
+        <Route path="/epitactai" element={<EpitactAI />} />
+      </Routes>
     </div>
   );
 }
