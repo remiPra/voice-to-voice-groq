@@ -71,6 +71,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
   const [threshold, setThreshold] = useState<number>(silenceThreshold);
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
   const [calibrationProgress, setCalibrationProgress] = useState<number>(0);
+  const [isManualRecording, setIsManualRecording] = useState<boolean>(false);
 
   // Ref pour la calibration
   const noiseFloorRef = useRef<number[]>([]);
@@ -194,7 +195,43 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       }
     }, 100);
   };
+  // 1. Ajoutez un nouvel état pour suivre l'enregistrement manuel
 
+  // 2. Créez une fonction pour gérer le démarrage/arrêt de l'enregistrement manuel
+  const toggleManualRecording = () => {
+    if (isManualRecording) {
+      // Si on enregistre déjà, on arrête l'enregistrement
+      stopRecording();
+      setIsManualRecording(false);
+    } else {
+      // Si on n'enregistre pas, on démarre l'enregistrement
+      if (streamRef.current) {
+        startRecording();
+        setIsManualRecording(true);
+      } else {
+        // Si le micro n'est pas encore activé, on l'active d'abord
+        navigator.mediaDevices
+          .getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          })
+          .then((stream) => {
+            streamRef.current = stream;
+            startRecording();
+            setIsManualRecording(true);
+          })
+          .catch((err) => {
+            console.error("Erreur lors de l'accès au microphone:", err);
+          });
+      }
+    }
+  };
+
+  // 3. Ajoutez le bouton dans votre interface, par exemple à côté du bouton microphone existant
+  // Dans votre section d'interface où se trouve le bouton microphone, ajoutez:
   const finishCalibration = () => {
     if (noiseFloorRef.current.length > 0) {
       const sum = noiseFloorRef.current.reduce((a, b) => a + b, 0);
@@ -288,7 +325,10 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       }
       const data: GroqResponse = await response.json();
       if (data.choices?.[0]?.message?.content) {
-        const assistantContent = data.choices[0].message.content;
+        const assistantContent = cleanLLMResponse(
+          data.choices[0].message.content
+        );
+
         const assistantMessage: Message = {
           role: "assistant",
           content: assistantContent,
@@ -757,6 +797,15 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
     }
   };
 
+  // Fonction de nettoyage pour supprimer les astérisques
+  const cleanLLMResponse = (text) => {
+    // Supprime tous les astérisques du texte
+    return text.replace(/\*/g, "");
+
+    // Alternative: Si vous voulez conserver le texte entre astérisques mais supprimer les astérisques eux-mêmes
+    // return text.replace(/\*([^*]+)\*/g, '$1');
+  };
+
   const stopListening = () => {
     if (sourceRef.current) sourceRef.current.disconnect();
     if (streamRef.current)
@@ -817,6 +866,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       setInputText("");
     }
   };
+
   return (
     <>
       <div className="flex h-screen bg-[#f5f7fa] overflow-hidden relative font-['Poppins',sans-serif]">
@@ -830,6 +880,16 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
               <Navbar />
 
               <div className="flex space-x-3">
+                <button
+                  onClick={toggleManualRecording}
+                  className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                    isManualRecording
+                      ? "bg-[#e63946] text-white shadow-lg"
+                      : "bg-[#ff9000] text-white shadow-lg"
+                  }`}
+                >
+                  {isManualRecording ? "■" : "●"}
+                </button>
                 <button
                   onClick={toggleListening}
                   className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
@@ -956,11 +1016,11 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
             </div>
           ) : (
             <div className="flex-grow relative overflow-hidden">
-              <div className="absolute  left-0 max-w-[600px]">
+              <div className="absolute lg:max-w-[450px] inset-0 w-full h-full">
                 {isTTSPlaying ? (
                   <video
                     key="speaking-video"
-                    src="/video2.mp4"
+                    src="/image_26_ins--video2.mp4"
                     className="w-full h-full object-cover"
                     autoPlay
                     loop
@@ -970,7 +1030,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
                 ) : (
                   <video
                     key="idle-video"
-                    src="/video1.mp4"
+                    src="/image_26_ins--video1.mp4"
                     className="w-full h-full object-cover"
                     autoPlay
                     loop
@@ -1036,16 +1096,28 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
                     : "Microphone désactivé"}
                 </span>
               </div>
-              <button
-                onClick={toggleListening}
-                className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
-                  isListening
-                    ? "bg-[#e63946] text-white shadow-lg"
-                    : "bg-[#3d9970] text-white shadow-lg"
-                }`}
-              >
-                {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={toggleManualRecording}
+                  className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                    isManualRecording
+                      ? "bg-[#e63946] text-white shadow-lg"
+                      : "bg-[#ff9000] text-white shadow-lg"
+                  }`}
+                >
+                  {isManualRecording ? "■ Stop" : "● REC"}
+                </button>
+                <button
+                  onClick={toggleListening}
+                  className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                    isListening
+                      ? "bg-[#e63946] text-white shadow-lg"
+                      : "bg-[#3d9970] text-white shadow-lg"
+                  }`}
+                >
+                  {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
+                </button>
+              </div>
             </div>
             <div className="w-full h-3 bg-[#1e3a8a] rounded-full overflow-hidden">
               <div
