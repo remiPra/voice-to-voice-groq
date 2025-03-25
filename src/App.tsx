@@ -1,6 +1,5 @@
 import { Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
-import ChatInterrupt from "./pages/Main";
 import ChatSansInterruption from "./pages/Help";
 import ProductGallery from "./components/ProductGallery";
 import productsData from "../public/epitact.json"; // Ajoutez cette ligne

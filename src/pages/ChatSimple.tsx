@@ -1,5 +1,4 @@
 // /app.tsx
-import SpeechDetector from "../components/speech-detector/SpeechDetector";
 import SpeechDetectorNoInterrupt from "../components/speech-detector/SpeechmedicalInterprete";
 
 function ChatSimple() {
