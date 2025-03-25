@@ -798,7 +798,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
   };
 
   // Fonction de nettoyage pour supprimer les astérisques
-  const cleanLLMResponse = (text) => {
+  const cleanLLMResponse = (text: any) => {
     // Supprime tous les astérisques du texte
     return text.replace(/\*/g, "");
 
