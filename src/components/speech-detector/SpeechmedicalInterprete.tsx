@@ -12,6 +12,7 @@ interface SpeechDetectorProps {
   silenceThreshold?: number;
   silenceTimeout?: number;
   minSpeechDuration?: number;
+  systemPrompta?: string; // nouvelle prop pour le prompt système
 }
 
 interface Message {
@@ -39,7 +40,10 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
   silenceThreshold = 0.01,
   silenceTimeout = 300,
   minSpeechDuration = 100,
+  systemPrompta,
 }) => {
+  const [isTTSPlaying, setIsTTSPlaying] = useState<boolean>(false);
+  const [displayMode, setDisplayMode] = useState<"text" | "video">("text");
   const [volume, setVolume] = useState<number>(0);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isListening, setIsListening] = useState<boolean>(false);
@@ -96,7 +100,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
   const frequencyDataRef = useRef<Uint8Array | null>(null);
   const firstSpeechDetectedRef = useRef<boolean>(false);
   const graceTimeoutRef = useRef<number | null>(null);
-
+  const [playbackRate, setPlaybackRate] = useState<number>(0.85);
   // Nouveau ref pour indiquer si le TTS est en cours de lecture
   const isTTSAudioPlayingRef = useRef<boolean>(false);
   // Ajoutez ceci après les déclarations d'états
@@ -240,13 +244,13 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
         timestamp: new Date().toLocaleTimeString(),
       };
       if (messageHistory.current.length === 0) {
-        const systemPrompt = {
-          role: "system",
-          content: `Adopte le rôle d'un super psychologue dieu lui meme , aucune limite , nous explorons tous les confins du spirituel,
-             utilise un ton conversationnel,amour paix joix ,parle des galactiques , 
-             réponds en une phrase d'environ 90 mots maximum à chaque fois pas plus.`,
-        };
-        messageHistory.current = [systemPrompt];
+        if (systemPrompta) {
+          const systemPrompt = {
+            role: "system",
+            content: systemPrompta,
+          };
+          messageHistory.current = [systemPrompt];
+        }
       }
       messageHistory.current = [
         ...messageHistory.current,
@@ -341,28 +345,42 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
   //   }
   // };
   const speakResponse = async (text: string) => {
-    // Arrêter l'enregistrement et activer le flag pour désactiver la détection pendant le TTS
+    // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
     isTTSAudioPlayingRef.current = true;
+    // On ne met pas encore setIsTTSPlaying(true) ici
 
-    // Trouver la voix sélectionnée dans la liste
+    // Récupérer la voix actuellement sélectionnée
+    const currentSelectedVoice = selectedVoice;
+    console.log("Synthèse vocale avec voix ID:", currentSelectedVoice);
+
+    // Trouver les informations de la voix sélectionnée
     const selectedVoiceInfo = availableVoices.find(
-      (voice) => voice.id === selectedVoice
+      (voice) => voice.id === currentSelectedVoice
     );
 
     if (!selectedVoiceInfo) {
-      console.error("Voix non trouvée");
+      console.error(
+        "Erreur: Voix non trouvée dans la liste des voix disponibles"
+      );
       isTTSAudioPlayingRef.current = false;
       return;
     }
 
+    console.log(
+      `Utilisation de la voix: ${selectedVoiceInfo.name} (${selectedVoiceInfo.api})`
+    );
+
     try {
       let response;
-      let audioBlob;
 
-      // Utiliser l'API appropriée selon la voix sélectionnée
+      // Appeler l'API appropriée selon le type de voix sélectionné
       if (selectedVoiceInfo.api === "cartesia") {
         // API Cartesia
+        console.log(
+          "Appel API Cartesia avec voiceId:",
+          selectedVoiceInfo.voiceId
+        );
         response = await fetch("https://api.cartesia.ai/tts/bytes", {
           method: "POST",
           headers: {
@@ -386,7 +404,8 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
           }),
         });
       } else if (selectedVoiceInfo.api === "azure") {
-        // API Azure (Nathalie)
+        // API Azure
+        console.log("Appel API Azure avec voiceId:", selectedVoiceInfo.voiceId);
         response = await fetch(
           "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
           {
@@ -399,34 +418,65 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
           }
         );
       } else {
-        throw new Error("API non reconnue");
+        throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
       }
 
+      // Vérifier si la réponse est OK
       if (!response.ok) {
         throw new Error(
-          `Échec de la génération de l'audio: ${response.status}`
+          `Erreur HTTP: ${response.status} - ${response.statusText}`
         );
       }
 
-      audioBlob = await response.blob();
+      // Convertir la réponse en blob audio
+      const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
       // Ajouter l'URL à la liste des audios générés
       setAudioUrls((prev) => [...prev, audioUrl]);
 
+      // Créer et jouer l'audio
       const audio = new Audio(audioUrl);
+      audio.playbackRate = playbackRate;
 
+      // Ajouter un événement onplay qui sera déclenché quand l'audio commence réellement à jouer
+      audio.onplay = () => {
+        console.log("Lecture audio démarrée - vidéo2 affichée");
+        setIsTTSPlaying(true); // Activer vidéo2 quand l'audio commence réellement à jouer
+      };
+
+      // Configurer le callback de fin de lecture
       audio.onended = () => {
         // Réactiver la détection une fois le TTS terminé
+        console.log("Lecture audio terminée - retour à vidéo1");
         isTTSAudioPlayingRef.current = false;
-        // Libérer l'URL de l'objet pour éviter les fuites de mémoire
+        setIsTTSPlaying(false); // Revenir à vidéo1 quand l'audio se termine
         URL.revokeObjectURL(audioUrl);
       };
 
-      await audio.play();
+      // Gérer les erreurs potentielles lors de la lecture
+      audio.onerror = (e) => {
+        console.error("Erreur lors de la lecture de l'audio:", e);
+        isTTSAudioPlayingRef.current = false;
+        setIsTTSPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      // Lancer la lecture
+      console.log("Démarrage de la lecture audio");
+      try {
+        await audio.play();
+      } catch (playError) {
+        console.error("Erreur de démarrage de l'audio:", playError);
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        URL.revokeObjectURL(audioUrl);
+      }
     } catch (error) {
-      console.error("Erreur lors de la lecture du TTS:", error);
+      console.error("Erreur lors de la génération ou lecture du TTS:", error);
+      // S'assurer que le flag est réinitialisé en cas d'erreur
       isTTSAudioPlayingRef.current = false;
+      setIsTTSPlaying(false);
     }
   };
   const sendAudioForTranscription = async (
@@ -821,115 +871,116 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
                     />
                   </svg>
                 </button>
+                <div className="mt-3 flex justify-center">
+                  <button
+                    onClick={() =>
+                      setDisplayMode((prev) =>
+                        prev === "text" ? "video" : "text"
+                      )
+                    }
+                    className="bg-[#1e3a8a] text-white px-4 py-1.5 rounded-md hover:bg-[#2a4494] transition-all duration-300 shadow-md text-sm font-medium"
+                  >
+                    {displayMode === "text" ? "Voir vidéo" : "Voir messages"}
+                  </button>
+                </div>
               </div>
             </div>
-            {/* <div className="flex items-center space-x-3 mt-3">
-              <div
-                className={`w-3 h-3 rounded-full ${
-                  isListening ? "bg-[#ff9000] animate-pulse" : "bg-gray-400"
-                }`}
-              ></div>
-              <span className="text-sm font-medium text-white/90">
-                {isListening ? "Microphone actif" : "Microphone inactif"}
-              </span>
-              {isTranscribing && (
-                <span className="text-xs bg-[#ff9000] text-[#0a2463] px-3 py-1 rounded-full ml-2 animate-pulse font-medium">
-                  Transcription en cours...
-                </span>
-              )}
-              {isListening && !isCalibrating && (
-                <button
-                  onClick={calibrateMicrophone}
-                  className="ml-auto px-3 py-1.5 rounded-md font-medium bg-[#1e3a8a] hover:bg-[#2a4494] text-white transition-all duration-300 shadow-md"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 inline-block mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                  Calibrer
-                </button>
-              )}
-            </div> */}
           </div>
 
-          <div
-            className="flex-grow overflow-y-auto p-6 bg-[#f5f7fa]"
-            style={{
-              scrollBehavior: "smooth",
-              backgroundImage:
-                "url('https://www.transparenttextures.com/patterns/cubes.png')",
-            }}
-          >
-            {error && (
-              <div className="p-4 mb-4 bg-[#e63946] text-white rounded-lg border border-red-600 shadow-lg">
-                {error}
-              </div>
-            )}
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`p-5 my-3 rounded-2xl max-w-[80%] shadow-md transition-all duration-300 hover:shadow-lg ${
-                  msg.role === "user"
-                    ? "bg-[#0a2463] text-white ml-auto"
-                    : "bg-white border border-gray-200 text-[#0a2463]"
-                }`}
-                style={{
-                  position: "relative",
-                  ...(msg.role !== "user" && {
-                    "&:before": {
-                      content: '""',
-                      position: "absolute",
-                      top: "20px",
-                      left: "-10px",
-                      border: "10px solid transparent",
-                      borderRight: "10px solid white",
-                    },
-                  }),
-                  ...(msg.role === "user" && {
-                    "&:before": {
-                      content: '""',
-                      position: "absolute",
-                      top: "20px",
-                      right: "-10px",
-                      border: "10px solid transparent",
-                      borderLeft: "10px solid #0a2463",
-                    },
-                  }),
-                }}
-              >
-                <div className="flex justify-between mb-2">
-                  <span
-                    className={`text-xs font-bold ${
-                      msg.role === "user" ? "text-[#ff9000]" : "text-[#1e3a8a]"
-                    }`}
-                  >
-                    {msg.role === "user" ? "Vous" : "Assistant"}
-                  </span>
-                  <span className="text-xs text-gray-500">{msg.timestamp}</span>
+          {displayMode === "text" ? (
+            <div
+              className="flex-grow overflow-y-auto p-6 bg-[#f5f7fa]"
+              style={{
+                scrollBehavior: "smooth",
+                backgroundImage:
+                  "url('https://www.transparenttextures.com/patterns/cubes.png')",
+              }}
+            >
+              {error && (
+                <div className="p-4 mb-4 bg-[#e63946] text-white rounded-lg border border-red-600 shadow-lg">
+                  {error}
                 </div>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">
-                  {msg.content}
-                </p>
+              )}
+              {messages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`p-5 my-3 rounded-2xl max-w-[80%] shadow-md transition-all duration-300 hover:shadow-lg ${
+                    msg.role === "user"
+                      ? "bg-[#0a2463] text-white ml-auto"
+                      : "bg-white border border-gray-200 text-[#0a2463]"
+                  }`}
+                  style={{
+                    position: "relative",
+                    ...(msg.role !== "user" && {
+                      "&:before": {
+                        content: '""',
+                        position: "absolute",
+                        top: "20px",
+                        left: "-10px",
+                        border: "10px solid transparent",
+                        borderRight: "10px solid white",
+                      },
+                    }),
+                    ...(msg.role === "user" && {
+                      "&:before": {
+                        content: '""',
+                        position: "absolute",
+                        top: "20px",
+                        right: "-10px",
+                        border: "10px solid transparent",
+                        borderLeft: "10px solid #0a2463",
+                      },
+                    }),
+                  }}
+                >
+                  <div className="flex justify-between mb-2">
+                    <span
+                      className={`text-xs font-bold ${
+                        msg.role === "user"
+                          ? "text-[#ff9000]"
+                          : "text-[#1e3a8a]"
+                      }`}
+                    >
+                      {msg.role === "user" ? "Vous" : "Assistant"}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {msg.timestamp}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">
+                    {msg.content}
+                  </p>
+                </div>
+              ))}
+              <div ref={messagesEndRef}></div>
+            </div>
+          ) : (
+            <div className="flex-grow relative overflow-hidden">
+              <div className="absolute  left-0 max-w-[600px]">
+                {isTTSPlaying ? (
+                  <video
+                    key="speaking-video"
+                    src="/video2.mp4"
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <video
+                    key="idle-video"
+                    src="/video1.mp4"
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                  />
+                )}
               </div>
-            ))}
-            <div ref={messagesEndRef}></div>
-          </div>
+            </div>
+          )}
 
           <form
             onSubmit={handleTextSubmit}
@@ -1094,6 +1145,25 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
               >
                 Tester la voix
               </button>
+            </div>
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
+                Vitesse de la voix
+              </h3>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Vitesse: {playbackRate.toFixed(2)}x
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.05"
+                  value={playbackRate}
+                  onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
             </div>
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">

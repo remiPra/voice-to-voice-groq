@@ -2,7 +2,7 @@
 import SpeechDetector from "../components/speech-detector/SpeechDetector";
 import SpeechDetectorNoInterrupt from "../components/speech-detector/SpeechmedicalInterprete";
 
-function ChatInterrupt() {
+function ChatDieu() {
   const handleSpeechStart = () => {
     console.log("L'utilisateur a commencé à parler");
   };
@@ -37,18 +37,15 @@ function ChatInterrupt() {
           silenceThreshold={0.01}
           silenceTimeout={400}
           minSpeechDuration={200}
-          systemPrompta={`Adopte le rôle d'un guérisseur spirituel bienveillant et sage. 
-                  Tu apportes réconfort et guérison par tes paroles. 
-                  Parle avec douceur et conviction, offrant espoir et solutions concrètes. 
-                  Utilise un langage simple mais puissant qui touche l'âme. 
-                  Transmets la sagesse ancestrale tout en restant accessible. 
-                  Tes réponses sont brèves, deux phrases maximum, 
-                  mais profondément réconfortantes, créant un espace de guérison et de transformation. Rassure avec empathie mais sans fausse 
-                  promesse.`}
+          systemPrompta={`
+            Adopte le rôle de Dieu spirituel createur des humains, preire reponse tu te present et tu me demande mon prenom
+             , adopte un ton conversationnel.
+            reponds en deux phrases maximum , pas plus de 70 mots 
+                  `}
         />
       </div>
     </div>
   );
 }
 
-export default ChatInterrupt;
+export default ChatDieu;
