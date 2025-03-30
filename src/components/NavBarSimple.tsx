@@ -71,11 +71,25 @@ const Navbar = () => {
               Chat Interrupt
             </Link>
             <Link
-              to="/chatInt"
+              to="/test"
               onClick={() => setDrawerOpen(false)}
               className="hover:text-gray-300"
             >
               Chat Sans Interruption
+            </Link>
+            <Link
+              to="/english"
+              onClick={() => setDrawerOpen(false)}
+              className="hover:text-gray-300"
+            >
+              English
+            </Link>
+            <Link
+              to="/final"
+              onClick={() => setDrawerOpen(false)}
+              className="hover:text-gray-300"
+            >
+              final
             </Link>
             <Link
               to="/epitact"

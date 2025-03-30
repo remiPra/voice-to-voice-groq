@@ -33,7 +33,7 @@ interface TranscriptionResult {
   text: string;
 }
 
-const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
+const EnglishDetector: React.FC<SpeechDetectorProps> = ({
   onSpeechStart,
   onSpeechEnd,
   onVolumeChange,
@@ -378,88 +378,68 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
     isTTSAudioPlayingRef.current = true;
-    // On ne met pas encore setIsTTSPlaying(true) ici
-
-    // Récupérer la voix actuellement sélectionnée
-    const currentSelectedVoice = selectedVoice;
-    console.log("Synthèse vocale avec voix ID:", currentSelectedVoice);
-
-    // Trouver les informations de la voix sélectionnée
-    const selectedVoiceInfo = availableVoices.find(
-      (voice) => voice.id === currentSelectedVoice
-    );
-
-    if (!selectedVoiceInfo) {
-      console.error(
-        "Erreur: Voix non trouvée dans la liste des voix disponibles"
-      );
-      isTTSAudioPlayingRef.current = false;
-      return;
-    }
-
-    console.log(
-      `Utilisation de la voix: ${selectedVoiceInfo.name} (${selectedVoiceInfo.api})`
-    );
 
     try {
-      let response;
-
-      // Appeler l'API appropriée selon le type de voix sélectionné
-      if (selectedVoiceInfo.api === "cartesia") {
-        // API Cartesia
-        console.log(
-          "Appel API Cartesia avec voiceId:",
-          selectedVoiceInfo.voiceId
-        );
-        response = await fetch("https://api.cartesia.ai/tts/bytes", {
+      // 1. Traduire d'abord le texte français vers l'anglais
+      const translationResponse = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
           method: "POST",
           headers: {
-            "Cartesia-Version": "2024-06-10",
-            "X-API-Key": import.meta.env.VITE_SYNTHESIA,
+            Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model_id: "sonic-2",
-            transcript: text,
-            voice: {
-              mode: "id",
-              id: selectedVoiceInfo.voiceId,
-            },
-            output_format: {
-              container: "mp3",
-              bit_rate: 128000,
-              sample_rate: 44100,
-            },
-            language: "fr",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Vous êtes un traducteur expert du français vers l'anglais. Traduisez le texte suivant en anglais sans ajouter d'explications ou de commentaires.",
+              },
+              {
+                role: "user",
+                content: text,
+              },
+            ],
+            model: "gemma2-9b-it",
           }),
-        });
-      } else if (selectedVoiceInfo.api === "azure") {
-        // API Azure
-        console.log("Appel API Azure avec voiceId:", selectedVoiceInfo.voiceId);
-        response = await fetch(
-          "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: text,
-              voice: selectedVoiceInfo.voiceId,
-            }),
-          }
-        );
-      } else {
-        throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
+        }
+      );
+
+      if (!translationResponse.ok) {
+        throw new Error(`Erreur de traduction: ${translationResponse.status}`);
       }
 
-      // Vérifier si la réponse est OK
-      if (!response.ok) {
-        throw new Error(
-          `Erreur HTTP: ${response.status} - ${response.statusText}`
-        );
+      const translationData = await translationResponse.json();
+      const translatedText = translationData.choices[0].message.content;
+      console.log("Texte traduit:", translatedText);
+
+      // 2. Utiliser le nouveau service PlayAI pour le TTS en anglais
+      const playAIResponse = await fetch(
+        "https://api.play.ai/api/v1/tts/stream",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${import.meta.env.VITE_PLAYAI_KEY}`,
+            "Content-Type": "application/json",
+            "X-USER-ID": "z7Y6Z4KYJEQCX3BUJNZyXMEwqsb2",
+          },
+          body: JSON.stringify({
+            model: "PlayDialog",
+            text: translatedText,
+            voice:
+              "s3://voice-cloning-zero-shot/baf1ef41-36b6-428c-9bdf-50ba54682bd8/original/manifest.json",
+            outputFormat: "wav",
+          }),
+        }
+      );
+
+      if (!playAIResponse.ok) {
+        throw new Error(`Erreur TTS PlayAI: ${playAIResponse.status}`);
       }
 
       // Convertir la réponse en blob audio
-      const audioBlob = await response.blob();
+      const audioBlob = await playAIResponse.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
       // Ajouter l'URL à la liste des audios générés
@@ -467,22 +447,19 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
 
       // Créer et jouer l'audio
       const audio = new Audio(audioUrl);
-      audioElementRef.current = audio; // Stocker la référence pour l'interruption
       audio.playbackRate = playbackRate;
 
-      // Ajouter un événement onplay qui sera déclenché quand l'audio commence réellement à jouer
+      // Ajouter un événement onplay
       audio.onplay = () => {
         console.log("Lecture audio démarrée - vidéo2 affichée");
-        setIsTTSPlaying(true); // Activer vidéo2 quand l'audio commence réellement à jouer
+        setIsTTSPlaying(true);
       };
 
       // Configurer le callback de fin de lecture
       audio.onended = () => {
-        // Réactiver la détection une fois le TTS terminé
         console.log("Lecture audio terminée - retour à vidéo1");
         isTTSAudioPlayingRef.current = false;
-        setIsTTSPlaying(false); // Revenir à vidéo1 quand l'audio se termine
-        audioElementRef.current = null;
+        setIsTTSPlaying(false);
         URL.revokeObjectURL(audioUrl);
       };
 
@@ -491,7 +468,6 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
         console.error("Erreur lors de la lecture de l'audio:", e);
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false);
-        audioElementRef.current = null;
         URL.revokeObjectURL(audioUrl);
       };
 
@@ -503,15 +479,12 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
         console.error("Erreur de démarrage de l'audio:", playError);
         setIsTTSPlaying(false);
         isTTSAudioPlayingRef.current = false;
-        audioElementRef.current = null;
         URL.revokeObjectURL(audioUrl);
       }
     } catch (error) {
       console.error("Erreur lors de la génération ou lecture du TTS:", error);
-      // S'assurer que le flag est réinitialisé en cas d'erreur
       isTTSAudioPlayingRef.current = false;
       setIsTTSPlaying(false);
-      audioElementRef.current = null;
     }
   };
 
@@ -1484,4 +1457,4 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
   );
 };
 
-export default SpeechDetectorClaude;
+export default EnglishDetector;

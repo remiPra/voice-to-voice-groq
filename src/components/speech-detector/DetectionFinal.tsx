@@ -1,4 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
+
+// Extend the Window interface to include currentPlayingAudio
+declare global {
+  interface Window {
+    currentPlayingAudio: HTMLAudioElement | null;
+  }
+}
 import { audioContext } from "../../lib/utils/audio-context";
 import VolMeterWorket from "../../lib/worklets/vol-meter";
 import Navbar from "../NavBarSimple";
@@ -12,7 +19,7 @@ interface SpeechDetectorProps {
   silenceThreshold?: number;
   silenceTimeout?: number;
   minSpeechDuration?: number;
-  systemPrompta?: string; // nouvelle prop pour le prompt système
+  systemPrompta?: string;
 }
 
 interface Message {
@@ -33,7 +40,7 @@ interface TranscriptionResult {
   text: string;
 }
 
-const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
+const DetectionFinal: React.FC<SpeechDetectorProps> = ({
   onSpeechStart,
   onSpeechEnd,
   onVolumeChange,
@@ -55,30 +62,23 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
   const [endNotification, setEndNotification] = useState<boolean>(false);
   //@ts-ignore
   const [recordingEnded, setRecordingEnded] = useState(false);
-  // Ajoutez ceci avec les autres états
-  const [selectedVoice, setSelectedVoice] = useState<string>("nathalie"); // Kevin par défaut
+  // Nouveaux Ã©tats pour la dÃ©tection d'interruption
+  const [interruptionDetected, setInterruptionDetected] =
+    useState<boolean>(false);
+  const [interruptionCount, setInterruptionCount] = useState<number>(0);
+
+  const [selectedVoice, setSelectedVoice] = useState<string>("nathalie"); // Kevin par dÃ©faut
   const [transcriptions, setTranscriptions] = useState<
-    {
-      id: string;
-      text: string;
-      timestamp: string;
-    }[]
+    { id: string; text: string; timestamp: string }[]
   >([]);
-  // @ts-ignore
+  //@ts-ignore
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string>("");
-  // @ts-ignore
-  const interruptionStartTimeRef = useRef<number | null>(null);
-  // @ts-ignore
-  const [ttsInterruptEnabled, setTtsInterruptEnabled] = useState<boolean>(true);
-
   const [threshold, setThreshold] = useState<number>(silenceThreshold);
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
   const [calibrationProgress, setCalibrationProgress] = useState<number>(0);
   const [isManualRecording, setIsManualRecording] = useState<boolean>(false);
-  // Ajout d'un état pour indiquer si une interruption a eu lieu
-  const [wasInterrupted, setWasInterrupted] = useState<boolean>(false);
 
   // Ref pour la calibration
   const noiseFloorRef = useRef<number[]>([]);
@@ -108,13 +108,13 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
   const frequencyDataRef = useRef<Uint8Array | null>(null);
   const firstSpeechDetectedRef = useRef<boolean>(false);
   const graceTimeoutRef = useRef<number | null>(null);
-  const [playbackRate, setPlaybackRate] = useState<number>(0.85);
-  // Nouveau ref pour indiquer si le TTS est en cours de lecture et stocker l'élément audio
+  // Nouveaux refs pour la dÃ©tection d'interruption
+  const lastSpeechTimeRef = useRef<number | null>(null);
+  const interruptionTimeoutRef = useRef<number | null>(null);
+  const interruptionThreshold = 200; // DurÃ©e minimale pour dÃ©tecter une interruption (ms)
+
+  const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const isTTSAudioPlayingRef = useRef<boolean>(false);
-  const audioElementRef = useRef<HTMLAudioElement | null>(null);
-  // Nouveau ref pour la validation d'interruption
-  const interruptValidationRef = useRef<number | null>(null);
-  // Ajoutez ceci après les déclarations d'états
   const availableVoices = [
     {
       id: "d5c4211c-9584-4468-a090-86b872b82708",
@@ -124,7 +124,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     },
     {
       id: "8600d5ec-d29c-44fe-8457-7d730dbe8323",
-      name: "Raël",
+      name: "RaÃ«l",
       api: "cartesia",
       voiceId: "8600d5ec-d29c-44fe-8457-7d730dbe8323",
     },
@@ -153,11 +153,34 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
       voiceId: "fr-FR-DeniseNeural",
     },
   ];
+  // Ajoutez cet useEffect dans votre composant
+  useEffect(() => {
+    // Cette fonction s'exÃ©cute chaque fois que interruptionDetected change
+    if (interruptionDetected && window.currentPlayingAudio) {
+      console.log("ðŸš¨ INTERRUPTION DÃ‰TECTÃ‰E - ARRÃŠT FORCÃ‰ DE L'AUDIO");
 
-  // Ref pour stocker les URLs des audios générés
-  //@ts-ignore
+      // Approche 1: MÃ©thode standard
+      window.currentPlayingAudio.pause();
+      window.currentPlayingAudio.currentTime = 0;
+
+      // Approche 2: CrÃ©er un nouvel Ã©lÃ©ment audio (pour forcer l'arrÃªt)
+      window.currentPlayingAudio.src = "";
+
+      // Approche 3: Supprimer l'Ã©lÃ©ment
+      if (window.currentPlayingAudio.parentNode) {
+        window.currentPlayingAudio.parentNode.removeChild(
+          window.currentPlayingAudio
+        );
+      }
+
+      // Mettre Ã  jour les Ã©tats
+      isTTSAudioPlayingRef.current = false;
+      setIsTTSPlaying(false);
+
+      console.log("âœ… Audio forcÃ© Ã  l'arrÃªt");
+    }
+  }, [interruptionDetected]);
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
-
   useEffect(() => {
     speechBooleanStateRef.current = speechBooleanState;
   }, [speechBooleanState]);
@@ -190,17 +213,75 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     };
   }, [speechBooleanState, silenceTimeout, onSpeechEnd]);
 
-  // Fonction pour interrompre le TTS
-  const interruptTTS = () => {
-    if (isTTSAudioPlayingRef.current && audioElementRef.current) {
-      audioElementRef.current.pause();
-      audioElementRef.current.currentTime = 0;
-      audioElementRef.current = null;
-      isTTSAudioPlayingRef.current = false;
-      setIsTTSPlaying(false);
-      setWasInterrupted(true);
-      setTimeout(() => setWasInterrupted(false), 2000);
-      console.log("TTS interrompu par l'utilisateur");
+  // Fonction pour dÃ©tecter les interruptions
+  // Variables pour la dÃ©tection basÃ©e sur la durÃ©e
+  const consecutiveSamplesNeeded = 5; // Environ 500ms si Ã©chantillonnage Ã  10Hz
+  const highVolumeSamplesRef = useRef<number>(0);
+  const lastHighVolumeTimeRef = useRef<number | null>(null);
+  const interruptionDurationThreshold = 500; // DurÃ©e minimale en ms pour confirmer une interruption
+
+  const detectInterruption = (currentVolume: number) => {
+    // Si le TTS est en cours, surveiller pour des interruptions
+    if (isTTSAudioPlayingRef.current) {
+      const now = Date.now();
+
+      // VÃ©rifier les frÃ©quences pour s'assurer que c'est bien une voix
+      let isVoiceFrequency = false;
+      if (analyserRef.current && frequencyDataRef.current) {
+        analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
+        const voiceFrequencyData = Array.from(
+          frequencyDataRef.current.slice(3, 25)
+        );
+        isVoiceFrequency = voiceFrequencyData.some((val) => val > 80);
+      }
+
+      // Si le volume dÃ©passe le seuil ET que les frÃ©quences correspondent Ã  une voix
+      if (currentVolume > threshold * 2 && isVoiceFrequency) {
+        // Si c'est le premier Ã©chantillon de volume Ã©levÃ©, enregistrer le temps
+        if (highVolumeSamplesRef.current === 0) {
+          lastHighVolumeTimeRef.current = now;
+        }
+
+        // IncrÃ©menter le compteur d'Ã©chantillons consÃ©cutifs
+        highVolumeSamplesRef.current += 1;
+
+        // VÃ©rifier si la durÃ©e est suffisante pour considÃ©rer comme une interruption
+        if (
+          lastHighVolumeTimeRef.current &&
+          (now - lastHighVolumeTimeRef.current >=
+            interruptionDurationThreshold ||
+            highVolumeSamplesRef.current >= consecutiveSamplesNeeded)
+        ) {
+          if (!interruptionTimeoutRef.current) {
+            console.log(
+              `âš ï¸ Interruption confirmÃ©e - son continu dÃ©tectÃ© pendant ${
+                now - (lastHighVolumeTimeRef.current || 0)
+              }ms`
+            );
+            setInterruptionDetected(true);
+            setInterruptionCount((prev) => prev + 1);
+
+            // RÃ©initialiser aprÃ¨s un dÃ©lai
+            interruptionTimeoutRef.current = window.setTimeout(() => {
+              setInterruptionDetected(false);
+              interruptionTimeoutRef.current = null;
+              highVolumeSamplesRef.current = 0;
+              lastHighVolumeTimeRef.current = null;
+            }, 2000);
+          }
+        }
+      } else {
+        // Si le volume est faible pendant une courte pÃ©riode, ne pas rÃ©initialiser
+        // Cela permet de tolÃ©rer de petites pauses dans la parole
+        if (
+          lastHighVolumeTimeRef.current &&
+          now - lastHighVolumeTimeRef.current > 300
+        ) {
+          // RÃ©initialiser le compteur si le silence dure plus de 300ms
+          highVolumeSamplesRef.current = 0;
+          lastHighVolumeTimeRef.current = null;
+        }
+      }
     }
   };
 
@@ -221,16 +302,13 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
 
   const toggleManualRecording = () => {
     if (isManualRecording) {
-      // Si on enregistre déjà, on arrête l'enregistrement
       stopRecording();
       setIsManualRecording(false);
     } else {
-      // Si on n'enregistre pas, on démarre l'enregistrement
       if (streamRef.current) {
         startRecording();
         setIsManualRecording(true);
       } else {
-        // Si le micro n'est pas encore activé, on l'active d'abord
         navigator.mediaDevices
           .getUserMedia({
             audio: {
@@ -245,7 +323,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
             setIsManualRecording(true);
           })
           .catch((err) => {
-            console.error("Erreur lors de l'accès au microphone:", err);
+            console.error("Erreur lors de l'accÃ¨s au microphone:", err);
           });
       }
     }
@@ -263,7 +341,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
       setThreshold(newThreshold);
       autoThresholdRef.current = newThreshold;
       console.log(
-        `Calibration terminée. Nouveau seuil: ${newThreshold.toFixed(4)}`
+        `Calibration terminÃ©e. Nouveau seuil: ${newThreshold.toFixed(4)}`
       );
     }
     setIsCalibrating(false);
@@ -375,23 +453,25 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
   };
 
   const speakResponse = async (text: string) => {
-    // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
+    // ArrÃªter l'enregistrement et dÃ©sactiver la dÃ©tection de parole pendant le TTS
     stopRecording();
     isTTSAudioPlayingRef.current = true;
-    // On ne met pas encore setIsTTSPlaying(true) ici
+    // RÃ©initialiser l'Ã©tat d'interruption
+    setInterruptionDetected(false);
+    lastSpeechTimeRef.current = null;
 
-    // Récupérer la voix actuellement sélectionnée
+    // RÃ©cupÃ©rer la voix actuellement sÃ©lectionnÃ©e
     const currentSelectedVoice = selectedVoice;
-    console.log("Synthèse vocale avec voix ID:", currentSelectedVoice);
+    console.log("SynthÃ¨se vocale avec voix ID:", currentSelectedVoice);
 
-    // Trouver les informations de la voix sélectionnée
+    // Trouver les informations de la voix sÃ©lectionnÃ©e
     const selectedVoiceInfo = availableVoices.find(
       (voice) => voice.id === currentSelectedVoice
     );
 
     if (!selectedVoiceInfo) {
       console.error(
-        "Erreur: Voix non trouvée dans la liste des voix disponibles"
+        "Erreur: Voix non trouvÃ©e dans la liste des voix disponibles"
       );
       isTTSAudioPlayingRef.current = false;
       return;
@@ -404,7 +484,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     try {
       let response;
 
-      // Appeler l'API appropriée selon le type de voix sélectionné
+      // Appeler l'API appropriÃ©e selon le type de voix sÃ©lectionnÃ©
       if (selectedVoiceInfo.api === "cartesia") {
         // API Cartesia
         console.log(
@@ -451,67 +531,88 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
         throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
       }
 
-      // Vérifier si la réponse est OK
+      // VÃ©rifier si la rÃ©ponse est OK
       if (!response.ok) {
         throw new Error(
           `Erreur HTTP: ${response.status} - ${response.statusText}`
         );
       }
 
-      // Convertir la réponse en blob audio
+      // Convertir la rÃ©ponse en blob audio
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
-      // Ajouter l'URL à la liste des audios générés
+      // Ajouter l'URL Ã  la liste des audios gÃ©nÃ©rÃ©s
       setAudioUrls((prev) => [...prev, audioUrl]);
 
-      // Créer et jouer l'audio
-      const audio = new Audio(audioUrl);
-      audioElementRef.current = audio; // Stocker la référence pour l'interruption
-      audio.playbackRate = playbackRate;
+      // CrÃ©er une rÃ©fÃ©rence directe Ã  l'Ã©lÃ©ment audio
+      const audioElement = new Audio(audioUrl);
+      audioElement.playbackRate = playbackRate;
 
-      // Ajouter un événement onplay qui sera déclenché quand l'audio commence réellement à jouer
-      audio.onplay = () => {
-        console.log("Lecture audio démarrée - vidéo2 affichée");
-        setIsTTSPlaying(true); // Activer vidéo2 quand l'audio commence réellement à jouer
+      // Variable globale pour accÃ©der Ã  l'audio en cours de lecture
+      window.currentPlayingAudio = audioElement;
+
+      // Mettre en place une surveillance spÃ©cifique des interruptions
+      let interruptionCheckInterval = setInterval(() => {
+        if (interruptionDetected) {
+          console.log(
+            "ðŸ›‘ Interruption dÃ©tectÃ©e - arrÃªt immÃ©diat de l'audio"
+          );
+          audioElement.pause();
+          audioElement.currentTime = 0;
+          clearInterval(interruptionCheckInterval);
+          isTTSAudioPlayingRef.current = false;
+          setIsTTSPlaying(false);
+          console.log("âœ… Audio interrompu avec succÃ¨s");
+        }
+      }, 100); // VÃ©rifier frÃ©quemment
+
+      // Ajouter un Ã©vÃ©nement onplay
+      audioElement.onplay = () => {
+        console.log("Lecture audio dÃ©marrÃ©e - vidÃ©o2 affichÃ©e");
+        setIsTTSPlaying(true);
       };
 
       // Configurer le callback de fin de lecture
-      audio.onended = () => {
-        // Réactiver la détection une fois le TTS terminé
-        console.log("Lecture audio terminée - retour à vidéo1");
+      audioElement.onended = () => {
+        // Nettoyer l'intervalle
+        clearInterval(interruptionCheckInterval);
+
+        window.currentPlayingAudio = null;
+        // RÃ©activer la dÃ©tection une fois le TTS terminÃ©
+        console.log("Lecture audio terminÃ©e - retour Ã  vidÃ©o1");
         isTTSAudioPlayingRef.current = false;
-        setIsTTSPlaying(false); // Revenir à vidéo1 quand l'audio se termine
-        audioElementRef.current = null;
+        setIsTTSPlaying(false);
         URL.revokeObjectURL(audioUrl);
       };
 
-      // Gérer les erreurs potentielles lors de la lecture
-      audio.onerror = (e) => {
+      // GÃ©rer les erreurs potentielles lors de la lecture
+      audioElement.onerror = (e) => {
+        clearInterval(interruptionCheckInterval);
         console.error("Erreur lors de la lecture de l'audio:", e);
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false);
-        audioElementRef.current = null;
         URL.revokeObjectURL(audioUrl);
+        window.currentPlayingAudio = null;
       };
 
       // Lancer la lecture
-      console.log("Démarrage de la lecture audio");
+      console.log("DÃ©marrage de la lecture audio");
       try {
-        await audio.play();
+        await audioElement.play();
       } catch (playError) {
-        console.error("Erreur de démarrage de l'audio:", playError);
+        clearInterval(interruptionCheckInterval);
+        console.error("Erreur de dÃ©marrage de l'audio:", playError);
         setIsTTSPlaying(false);
         isTTSAudioPlayingRef.current = false;
-        audioElementRef.current = null;
         URL.revokeObjectURL(audioUrl);
+        window.currentPlayingAudio = null;
       }
     } catch (error) {
-      console.error("Erreur lors de la génération ou lecture du TTS:", error);
-      // S'assurer que le flag est réinitialisé en cas d'erreur
+      console.error("Erreur lors de la gÃ©nÃ©ration ou lecture du TTS:", error);
+      // S'assurer que le flag est rÃ©initialisÃ© en cas d'erreur
       isTTSAudioPlayingRef.current = false;
       setIsTTSPlaying(false);
-      audioElementRef.current = null;
     }
   };
 
@@ -519,7 +620,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     audioBlob: Blob
   ): Promise<TranscriptionResult | null> => {
     if (!import.meta.env.VITE_GROQ_API_KEY) {
-      console.error("Clé API non trouvée");
+      console.error("ClÃ© API non trouvÃ©e");
       return null;
     }
     try {
@@ -561,12 +662,12 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     const audio = new Audio(url);
     audio.onloadedmetadata = async () => {
       const duration = audio.duration;
-      console.log("🎤 Durée de l'audio:", duration, "secondes");
+      console.log("ðŸŽ¤ DurÃ©e de l'audio:", duration, "secondes");
       if (duration < 0.5) {
-        console.warn("⏳ Ignoré: Audio trop court (<0.5s)");
+        console.warn("â ³ IgnorÃ©: Audio trop court (<0.5s)");
         return;
       }
-      console.log("✅ Envoi de l'audio à la transcription");
+      console.log("âœ… Envoi de l'audio Ã  la transcription");
       setIsTranscribing(true);
       const transcription = await sendAudioForTranscription(audioBlob);
       setIsTranscribing(false);
@@ -580,10 +681,10 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
           transcriptionText === "merci" ||
           transcriptionText === "." ||
           transcriptionText.length < 3 ||
-          /^[.,;:!?…]+$/.test(transcriptionText)
+          /^[.,;:!?â€¦]+$/.test(transcriptionText)
         ) {
           console.warn(
-            "⏳ Ignoré: Transcription non significative:",
+            "â ³ IgnorÃ©: Transcription non significative:",
             transcriptionText
           );
           return;
@@ -622,9 +723,9 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
       };
       mediaRecorderRef.current.start();
       isRecordingRef.current = true;
-      console.log("Enregistrement démarré");
+      console.log("Enregistrement dÃ©marrÃ©");
     } catch (err) {
-      console.error("Erreur lors du démarrage de l'enregistrement:", err);
+      console.error("Erreur lors du dÃ©marrage de l'enregistrement:", err);
     }
   };
 
@@ -635,7 +736,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     ) {
       mediaRecorderRef.current.stop();
       isRecordingRef.current = false;
-      console.log("Enregistrement arrêté");
+      console.log("Enregistrement arrÃªtÃ©");
       setSpeechBooleanState(0);
       setIsSpeaking(false);
       speechBooleanStateRef.current = 0;
@@ -715,49 +816,10 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
         setVolume(smoothedVolume);
         if (onVolumeChange) onVolumeChange(smoothedVolume);
 
-        // Vérifier si l'audio TTS est en cours et si on devrait l'interrompre
-        if (isTTSAudioPlayingRef.current && audioElementRef.current) {
-          // Utiliser un seuil plus élevé pour l'interruption pour éviter les fausses alertes
-          const interruptThreshold = threshold * 1.5;
+        // Appel Ã  la fonction de dÃ©tection d'interruption
+        detectInterruption(smoothedVolume);
 
-          if (smoothedVolume > interruptThreshold) {
-            // Vérifier les fréquences vocales pour s'assurer que c'est bien de la parole
-            if (analyserRef.current && frequencyDataRef.current) {
-              analyserRef.current.getByteFrequencyData(
-                frequencyDataRef.current
-              );
-              const voiceFrequencyData = Array.from(
-                frequencyDataRef.current.slice(3, 25)
-              );
-              const hasVoiceFrequency = voiceFrequencyData.some(
-                (val) => val > 80
-              );
-
-              if (hasVoiceFrequency) {
-                // Utiliser un compteur pour éviter les interruptions accidentelles
-                silenceCountRef.current = 0;
-                if (!interruptValidationRef.current) {
-                  interruptValidationRef.current = window.setTimeout(() => {
-                    interruptTTS();
-                    // Commencer à enregistrer la nouvelle entrée
-                    startRecording();
-                    interruptValidationRef.current = null;
-                  }, 150); // Courte validation pour réactivité
-                }
-              } else if (interruptValidationRef.current) {
-                clearTimeout(interruptValidationRef.current);
-                interruptValidationRef.current = null;
-              }
-            }
-          } else if (interruptValidationRef.current) {
-            clearTimeout(interruptValidationRef.current);
-            interruptValidationRef.current = null;
-          }
-
-          // Si le TTS est en cours, ne pas traiter la détection de parole normale
-          return;
-        }
-
+        // Le reste de la logique de dÃ©tection de parole
         if (analyserRef.current && frequencyDataRef.current) {
           analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
           const voiceFrequencyData = Array.from(
@@ -769,7 +831,13 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
             currentThreshold = threshold * 0.8;
           }
           const now = Date.now();
-          if (smoothedVolume > currentThreshold && hasVoiceFrequency) {
+
+          // Si le TTS est en cours, ne pas dÃ©marrer d'enregistrement
+          if (
+            !isTTSAudioPlayingRef.current &&
+            smoothedVolume > currentThreshold &&
+            hasVoiceFrequency
+          ) {
             silenceCountRef.current = 0;
             if (graceTimeoutRef.current) {
               clearTimeout(graceTimeoutRef.current);
@@ -831,13 +899,11 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
       };
       setIsListening(true);
     } catch (error) {
-      console.error("Erreur lors de l'accès au microphone:", error);
+      console.error("Erreur lors de l'accÃ¨s au microphone:", error);
     }
   };
 
-  // Fonction de nettoyage pour supprimer les astérisques
   const cleanLLMResponse = (text: any) => {
-    // Supprime tous les astérisques du texte
     return text.replace(/\*/g, "");
   };
 
@@ -861,20 +927,12 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
       clearTimeout(graceTimeoutRef.current);
       graceTimeoutRef.current = null;
     }
-    if (interruptValidationRef.current) {
-      clearTimeout(interruptValidationRef.current);
-      interruptValidationRef.current = null;
+    if (interruptionTimeoutRef.current) {
+      clearTimeout(interruptionTimeoutRef.current);
+      interruptionTimeoutRef.current = null;
     }
     if (isRecordingRef.current) {
       stopRecording();
-    }
-    // Si un TTS est en cours, l'arrêter également
-    if (isTTSAudioPlayingRef.current && audioElementRef.current) {
-      audioElementRef.current.pause();
-      audioElementRef.current.currentTime = 0;
-      audioElementRef.current = null;
-      isTTSAudioPlayingRef.current = false;
-      setIsTTSPlaying(false);
     }
     setIsSpeaking(false);
     setIsListening(false);
@@ -884,6 +942,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     silenceCountRef.current = 0;
     firstSpeechDetectedRef.current = false;
     volumeHistory.current = [];
+    lastSpeechTimeRef.current = null;
   };
 
   const toggleListening = async () => {
@@ -898,10 +957,13 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
     setSpeechBooleanState(0);
     setSpeechEndCount(0);
     setLastEndTime("");
+    setInterruptionCount(0);
+    setInterruptionDetected(false);
     hasSpokeRef.current = false;
     silenceCountRef.current = 0;
     firstSpeechDetectedRef.current = false;
     volumeHistory.current = [];
+    lastSpeechTimeRef.current = null;
   };
 
   const [inputText, setInputText] = useState<string>("");
@@ -917,6 +979,13 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
   return (
     <>
       <div className="flex h-screen bg-[#f5f7fa] overflow-hidden relative font-['Poppins',sans-serif]">
+        {/* Indicateur d'interruption */}
+        {interruptionDetected && (
+          <div className="fixed top-4 right-4 bg-[#e63946] text-white px-4 py-2 rounded-lg shadow-lg animate-pulse z-50">
+            Interruption dÃ©tectÃ©e !
+          </div>
+        )}
+
         {/* Contenu principal */}
         <div className="w-full flex flex-col h-full">
           <div className="bg-[#0a2463] p-5 shadow-lg">
@@ -935,7 +1004,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                       : "bg-[#ff9000] text-white shadow-lg"
                   }`}
                 >
-                  {isManualRecording ? "■" : "●"}
+                  {isManualRecording ? "â– " : "â— "}
                 </button>
                 <button
                   onClick={toggleListening}
@@ -987,7 +1056,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                     }
                     className="bg-[#1e3a8a] text-white px-4 py-1.5 rounded-md hover:bg-[#2a4494] transition-all duration-300 shadow-md text-sm font-medium"
                   >
-                    {displayMode === "text" ? "Voir vidéo" : "Voir messages"}
+                    {displayMode === "text" ? "Voir vidÃ©o" : "Voir messages"}
                   </button>
                 </div>
               </div>
@@ -1006,12 +1075,6 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
               {error && (
                 <div className="p-4 mb-4 bg-[#e63946] text-white rounded-lg border border-red-600 shadow-lg">
                   {error}
-                </div>
-              )}
-              {/* Notification d'interruption */}
-              {wasInterrupted && (
-                <div className="p-4 mb-4 bg-[#3d9970] text-white rounded-lg border border-green-600 shadow-lg text-center">
-                  Réponse interrompue par l'utilisateur
                 </div>
               )}
               {messages.map((msg, index) => (
@@ -1104,7 +1167,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="Écrivez votre message..."
+                placeholder="Ã‰crivez votre message..."
                 className="flex-grow px-5 py-3 bg-[#f5f7fa] border border-gray-300 rounded-l-full text-[#0a2463] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-transparent"
                 disabled={processing.current}
               />
@@ -1136,19 +1199,21 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                   className={`h-10 w-10 rounded-full flex items-center justify-center ${
                     isSpeaking
                       ? "bg-[#3d9970] text-white animate-pulse shadow-lg"
+                      : interruptionDetected
+                      ? "bg-[#e63946] text-white animate-pulse shadow-lg"
                       : "bg-gray-700 text-gray-300"
                   }`}
                 >
-                  {isSpeaking ? "🎤" : "🔇"}
+                  {isSpeaking ? "ðŸŽ¤" : interruptionDetected ? "ðŸ”Š" : "ðŸ”‡"}
                 </div>
                 <span className="text-sm font-medium text-white">
                   {isSpeaking
-                    ? "Parole détectée"
+                    ? "Parole dÃ©tectÃ©e"
+                    : interruptionDetected
+                    ? "Interruption dÃ©tectÃ©e!"
                     : isListening
-                    ? isTTSPlaying
-                      ? "Assistant parle (vous pouvez interrompre)"
-                      : "En attente de parole..."
-                    : "Microphone désactivé"}
+                    ? "En attente de parole..."
+                    : "Microphone dÃ©sactivÃ©"}
                 </span>
               </div>
               <div className="flex space-x-2">
@@ -1160,7 +1225,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                       : "bg-[#ff9000] text-white shadow-lg"
                   }`}
                 >
-                  {isManualRecording ? "■ Stop" : "● REC"}
+                  {isManualRecording ? "â–  Stop" : "â— REC"}
                 </button>
                 <button
                   onClick={toggleListening}
@@ -1179,8 +1244,8 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                 className={`h-full transition-all duration-100 ${
                   isSpeaking
                     ? "bg-[#3d9970]"
-                    : isTTSPlaying
-                    ? "bg-[#ff9000]"
+                    : interruptionDetected
+                    ? "bg-[#e63946]"
                     : isListening
                     ? "bg-[#ff9000]"
                     : "bg-gray-600"
@@ -1234,7 +1299,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
             </div>
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                Sélection de voix
+                SÃ©lection de voix
               </h3>
               <div className="space-y-2">
                 {availableVoices.map((voice) => (
@@ -1266,7 +1331,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                 onClick={() => {
                   if (selectedVoice && !processing.current) {
                     speakResponse(
-                      "Ceci est un test de la voix sélectionnée. Vous pouvez m'interrompre en parlant pendant que je vous réponds."
+                      "Ceci est un test de la voix sÃ©lectionnÃ©e. Comment puis-je vous aider aujourd'hui?"
                     );
                   }
                 }}
@@ -1300,9 +1365,9 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
               </h3>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Seuil de détection: {threshold.toFixed(4)}
+                  Seuil de dÃ©tection: {threshold.toFixed(4)}
                   {autoThresholdRef.current !== threshold &&
-                    " (Ajusté manuellement)"}
+                    " (AjustÃ© manuellement)"}
                 </label>
                 <input
                   type="range"
@@ -1336,40 +1401,12 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
             </div>
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                Paramètres d'interruption
-              </h3>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Seuil d'interruption: {(threshold * 1.5).toFixed(4)}
-                </label>
-                <p className="text-xs text-gray-500 mt-1">
-                  (Automatiquement défini à 1.5x le seuil normal)
-                </p>
-              </div>
-              <div className="mt-4">
-                <div className="flex items-center space-x-2">
-                  <div
-                    className={`h-4 w-4 rounded-full ${
-                      isTTSAudioPlayingRef.current
-                        ? "bg-[#3d9970]"
-                        : "bg-gray-300"
-                    }`}
-                  ></div>
-                  <span className="text-sm text-gray-700">
-                    Détection d'interruption{" "}
-                    {isTTSAudioPlayingRef.current ? "active" : "inactive"}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="p-5 border-b border-gray-200">
-              <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                États de détection
+                Ã‰tats de dÃ©tection
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-gray-100 rounded-xl">
                   <div className="text-xs font-medium mb-2 text-gray-700">
-                    État de parole:
+                    Ã‰tat de parole:
                   </div>
                   <div className="flex justify-center">
                     <span
@@ -1392,6 +1429,18 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                       {speechEndCount}
                     </span>
                   </div>
+                </div>
+              </div>
+
+              {/* Section pour le compteur d'interruptions */}
+              <div className="mt-4 p-4 bg-gray-100 rounded-xl">
+                <div className="text-xs font-medium mb-2 text-gray-700">
+                  Nombre d'interruptions:
+                </div>
+                <div className="flex justify-center">
+                  <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-[#e63946] text-white">
+                    {interruptionCount}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1426,11 +1475,11 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
             </div>
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                Audios générés
+                Audios gÃ©nÃ©rÃ©s
               </h3>
               {audioUrls.length === 0 ? (
                 <p className="text-gray-500 italic text-sm">
-                  Aucun audio généré pour le moment
+                  Aucun audio gÃ©nÃ©rÃ© pour le moment
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -1448,25 +1497,26 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
             </div>
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                Informations de débogage
+                Informations de dÃ©bogage
               </h3>
               <div className="text-xs space-y-2 bg-gray-100 p-3 rounded-lg text-gray-700">
                 <p>Volume actuel: {volume.toFixed(5)}</p>
                 <p>Seuil actuel: {threshold.toFixed(5)}</p>
                 <p>
-                  Seuil après première détection: {(threshold * 0.8).toFixed(5)}
+                  Seuil aprÃ¨s premiÃ¨re dÃ©tection:{" "}
+                  {(threshold * 0.8).toFixed(5)}
                 </p>
-                <p>Seuil d'interruption: {(threshold * 1.5).toFixed(5)}</p>
                 <p>
-                  Première parole détectée:{" "}
+                  PremiÃ¨re parole dÃ©tectÃ©e:{" "}
                   {firstSpeechDetectedRef.current ? "Oui" : "Non"}
                 </p>
-                <p>Durée minimale parole: {minSpeechDuration}ms</p>
+                <p>DurÃ©e minimale parole: {minSpeechDuration}ms</p>
                 <p>Silence avant fin: {silenceTimeout}ms</p>
+                <p>Seuil d'interruption: {interruptionThreshold}ms</p>
                 <p>
-                  TTS en cours: {isTTSAudioPlayingRef.current ? "Oui" : "Non"}
+                  Interruption actuelle:{" "}
+                  {interruptionDetected ? "DÃ©tectÃ©e" : "Aucune"}
                 </p>
-                <p>Interruption récente: {wasInterrupted ? "Oui" : "Non"}</p>
               </div>
             </div>
             <div className="p-5">
@@ -1474,7 +1524,7 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
                 onClick={resetCounters}
                 className="w-full px-4 py-3 rounded-lg font-medium bg-[#0a2463] hover:bg-[#1e3a8a] text-white transition-all duration-300 shadow-md"
               >
-                Réinitialiser les compteurs
+                RÃ©initialiser les compteurs
               </button>
             </div>
           </div>
@@ -1484,4 +1534,4 @@ const SpeechDetectorClaude: React.FC<SpeechDetectorProps> = ({
   );
 };
 
-export default SpeechDetectorClaude;
+export default DetectionFinal;

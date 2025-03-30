@@ -875,7 +875,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
           <div className="bg-[#0a2463] p-5 shadow-lg">
             <div className="flex justify-between items-center">
               <h1 className="hidden md:block text-2xl font-['Montserrat',sans-serif] font-bold text-white tracking-tight">
-                <span className="text-[#ff9000]">Chat</span>Assistant
+                <span className="text-[#ff9000]">Chat</span>Assistante
               </h1>
               <Navbar />
 

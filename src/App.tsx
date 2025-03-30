@@ -7,6 +7,9 @@ import EpitactAI from "./pages/Epitact";
 import ChatSimple from "./pages/ChatSimple";
 import ChatDieu from "./pages/ChatDieu";
 import SpeechDetector from "./components/speech-detector/SpeechDetector";
+import SpeechDetectorClaude from "./components/speech-detector/Testttt";
+import EnglishDetector from "./components/speech-detector/EnglishDetector";
+import DetectionFinal from "./components/speech-detector/DetectionFinal";
 
 function App() {
   return (
@@ -14,6 +17,10 @@ function App() {
       <Routes>
         <Route path="/chat" element={<Home />} />
         <Route path="/chatInt" element={<SpeechDetector />} />
+        <Route path="/test" element={<SpeechDetectorClaude />} />
+        <Route path="/english" element={<EnglishDetector />} />
+        <Route path="/final" element={<DetectionFinal />} />
+
         <Route path="/" element={<ChatSansInterruption />} />
         <Route path="/chatdieu" element={<ChatDieu />} />
         <Route path="/chatsimple" element={<ChatSimple />} />
