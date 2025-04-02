@@ -83,7 +83,15 @@ const Navbar = () => {
               className="hover:text-gray-300"
             >
               English
+            </Link> 
+            <Link
+              to="/chinois"
+              onClick={() => setDrawerOpen(false)}
+              className="hover:text-gray-300"
+            >
+              Traducteur de Vacances 
             </Link>
+
             <Link
               to="/final"
               onClick={() => setDrawerOpen(false)}

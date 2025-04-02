@@ -23,7 +23,7 @@ function App() {
         <Route path="/test" element={<SpeechDetectorClaude />} />
         <Route path="/english" element={<EnglishDetector />} />
         <Route path="/final" element={<DetectionFinal />} />
- <Route path="/chinois" element={<TraducteurVacances/>} />
+        <Route path="/chinois" element={<TraducteurVacances/>} />
         <Route path="/" element={<ChatSansInterruption />} />
         <Route path="/chatdieu" element={<ChatDieu />} />
         <Route path="/chatsimple" element={<ChatSimple />} />
