@@ -198,6 +198,23 @@ const TraducteurVacances: React.FC = () => {
     }
   };
 
+
+// Ajoutez cette fonction pour gérer l'appui sur les touches dans le textarea
+const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+  // Si la touche Entrée est pressée sans la touche Shift (pour permettre les sauts de ligne avec Shift+Entrée)
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault(); // Empêche le saut de ligne par défaut
+    
+    // Vérifiez que le texte n'est pas vide et qu'aucune traduction n'est en cours
+    if (inputText.trim() && !isTranslating && !isRecording) {
+      const lang = detectLanguage(inputText);
+      setDetectedLanguage(lang);
+      processTranslations(inputText, lang);
+    }
+  }
+};
+
+
   // Soumission du formulaire texte
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -226,11 +243,34 @@ const TraducteurVacances: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto my-4 p-4 bg-white rounded-lg shadow-lg">
-      <h1 className="text-xl md:text-2xl font-bold text-center mb-4 text-gray-800">
+         {/* Résultats */}
+      {Object.keys(translations).length > 0 && (
+        <div className="space-y-4 mb-4">
+          {Object.entries(translations).map(([lang, text]) => (
+            <div key={lang} className="mb-4">
+              <h2 className="font-medium text-gray-800 mb-2 flex items-center">
+                <MdTranslate className="mr-1" />
+                Traduction en {languageDisplay[lang as SupportedLanguage].flag} {languageDisplay[lang as SupportedLanguage].name}:
+              </h2>
+              <div className={`p-3 border rounded-lg ${
+                lang === 'ja' ? 'bg-green-50 border-green-200' :
+                lang === 'fr' ? 'bg-blue-50 border-blue-200' : 
+                'bg-purple-50 border-purple-200'
+              }`}>
+                <p className="whitespace-pre-wrap">{text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+     
+     
+      {/* <h1 className="text-xl md:text-2xl font-bold text-center mb-4 text-gray-800">
         Traducteur de Vacances au Japon
       </h1>
       
-      {/* Explications */}
+     
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
         <p><strong>Comment ça marche:</strong></p>
         <ul className="list-disc ml-5 space-y-1 mt-1">
@@ -238,21 +278,23 @@ const TraducteurVacances: React.FC = () => {
           <li>Parlez ou écrivez en japonais → traduction en français ET chinois</li>
         </ul>
       </div>
-      
+       */}
       {/* Entrée */}
+      <div className="bottom-0 left-0  w-full fixed z-5">
       <form onSubmit={handleSubmit} className="mb-4">
         <div className="mb-3">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Texte à traduire:
           </label>
           <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-            rows={4}
-            placeholder="Entrez du texte à traduire..."
-            disabled={isTranslating || isRecording}
-          />
+  value={inputText}
+  onChange={(e) => setInputText(e.target.value)}
+  onKeyDown={handleKeyDown}
+  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+  rows={4}
+  placeholder="Entrez du texte à traduire..."
+  disabled={isTranslating || isRecording}
+/>
           
           {detectedLanguage && (
             <div className="mt-1 text-sm text-gray-500">
@@ -262,12 +304,13 @@ const TraducteurVacances: React.FC = () => {
         </div>
         
         {/* Boutons d'action */}
-        <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mb-4">
+        <div className="grid h-[100px] grid-cols-3 md:grid-cols-4 gap-2 mb-4">
           <button
             type="button"
             onClick={() => startRecording("fr")}
             disabled={isTranslating || (isRecording && recordingLanguage !== "fr")}
-            className={`flex items-center justify-center py-2 px-2 md:px-3 rounded-lg text-white font-medium text-xs md:text-sm transition-all
+            className={`flex items-center justify-center py-2 px-2 md:px-3 
+              text-white font-medium text-xl md:text-sm transition-all
               ${isRecording && recordingLanguage === "fr"
                 ? "bg-red-500 hover:bg-red-600" 
                 : "bg-blue-600 hover:bg-blue-700"} 
@@ -284,7 +327,7 @@ const TraducteurVacances: React.FC = () => {
             type="button"
             onClick={() => startRecording("ja")}
             disabled={isTranslating || (isRecording && recordingLanguage !== "ja")}
-            className={`flex items-center justify-center py-2 px-2 md:px-3 rounded-lg text-white font-medium text-xs md:text-sm transition-all
+            className={`flex items-center justify-center py-2 px-2 md:px-3 rounded-lg text-white font-medium text-xl md:text-sm transition-all
               ${isRecording && recordingLanguage === "ja"
                 ? "bg-red-500 hover:bg-red-600" 
                 : "bg-green-600 hover:bg-green-700"} 
@@ -301,7 +344,7 @@ const TraducteurVacances: React.FC = () => {
             type="button"
             onClick={() => startRecording("zh")}
             disabled={isTranslating || (isRecording && recordingLanguage !== "zh")}
-            className={`flex items-center justify-center py-2 px-2 md:px-3 rounded-lg text-white font-medium text-xs md:text-sm transition-all
+            className={`flex items-center justify-center py-2 px-2 md:px-3 rounded-lg text-white font-medium text-xl md:text-sm transition-all
               ${isRecording && recordingLanguage === "zh"
                 ? "bg-red-500 hover:bg-red-600" 
                 : "bg-purple-600 hover:bg-purple-700"} 
@@ -317,7 +360,7 @@ const TraducteurVacances: React.FC = () => {
           <button
             type="submit"
             disabled={!inputText.trim() || isTranslating || isRecording}
-            className={`flex items-center justify-center py-2 px-3 rounded-lg bg-indigo-600 text-white font-medium text-xs md:text-sm transition-all col-span-3 md:col-span-1
+            className={`flex hidden items-center justify-center py-2 px-3 rounded-lg bg-indigo-600 text-white font-medium text-xs md:text-sm transition-all col-span-3 md:col-span-1
               ${(!inputText.trim() || isTranslating || isRecording) ? "opacity-50 cursor-not-allowed" : "hover:bg-indigo-700"}
             `}
           >
@@ -346,28 +389,7 @@ const TraducteurVacances: React.FC = () => {
           </p>
         </div>
       )}
-      
-      {/* Résultats */}
-      {Object.keys(translations).length > 0 && (
-        <div className="space-y-4 mb-4">
-          {Object.entries(translations).map(([lang, text]) => (
-            <div key={lang} className="mb-4">
-              <h2 className="font-medium text-gray-800 mb-2 flex items-center">
-                <MdTranslate className="mr-1" />
-                Traduction en {languageDisplay[lang as SupportedLanguage].flag} {languageDisplay[lang as SupportedLanguage].name}:
-              </h2>
-              <div className={`p-3 border rounded-lg ${
-                lang === 'ja' ? 'bg-green-50 border-green-200' :
-                lang === 'fr' ? 'bg-blue-50 border-blue-200' : 
-                'bg-purple-50 border-purple-200'
-              }`}>
-                <p className="whitespace-pre-wrap">{text}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      
+      </div>
       {/* Pied de page */}
       <div className="text-xs text-center text-gray-500 mt-4">
         Parfait pour vos vacances au Japon en famille
