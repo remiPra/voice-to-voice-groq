@@ -91,6 +91,13 @@ const Navbar = () => {
             >
               Traducteur de Vacances 
             </Link>
+            <Link
+              to="/planches"
+              onClick={() => setDrawerOpen(false)}
+              className="hover:text-gray-300"
+            >
+              Planches 
+            </Link>
 
             <Link
               to="/final"
