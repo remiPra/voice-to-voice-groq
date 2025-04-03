@@ -10,7 +10,7 @@ import SpeechDetector from "./components/speech-detector/SpeechDetector";
 import SpeechDetectorClaude from "./components/speech-detector/Testttt";
 import EnglishDetector from "./components/speech-detector/EnglishDetector";
 import DetectionFinal from "./components/speech-detector/DetectionFinal";
-
+import PlankExerciseApp from './components/PlankExerciseApp';
 import TraducteurVacances from "./components/speech-detector/TraducteurMultilingue";
 
 
@@ -24,6 +24,7 @@ function App() {
         <Route path="/english" element={<EnglishDetector />} />
         <Route path="/final" element={<DetectionFinal />} />
         <Route path="/chinois" element={<TraducteurVacances/>} />
+        <Route path="/planches" element={<PlankExerciseApp />} />
         <Route path="/" element={<ChatSansInterruption />} />
         <Route path="/chatdieu" element={<ChatDieu />} />
         <Route path="/chatsimple" element={<ChatSimple />} />
