@@ -141,6 +141,7 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     
     // Mettre à jour l'URL pour permettre le partage
     window.history.pushState({}, '', `?session=${newSessionId}`);
+    setShowSessionOptions(false);
   };
 
   // Rejoindre une session existante
