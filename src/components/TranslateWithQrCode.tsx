@@ -128,6 +128,10 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     
     if (!newSessionId) return;
     
+    // Commencer à écouter immédiatement les messages et participants
+    listenToSessionMessages(newSessionId);
+    listenToParticipants(newSessionId);
+    
     // Initialiser la session avec le premier participant
     set(newSessionRef, {
       createdAt: Date.now(),
@@ -143,10 +147,6 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     setSessionId(newSessionId);
     setIsCreator(true); // Marquer cet utilisateur comme créateur
     
-    // Écouter les messages de cette session
-    listenToSessionMessages(newSessionId);
-    listenToParticipants(newSessionId);
-    
     // Mettre à jour l'URL pour permettre le partage
     window.history.pushState({}, '', `?session=${newSessionId}`);
     setShowSessionOptions(false);
@@ -156,6 +156,11 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
   const joinExistingSession = () => {
     if (!db || !sessionId || !userLanguage) return;
     
+    // Commencer immédiatement à écouter les participants et les messages
+    listenToParticipants(sessionId);
+    listenToSessionMessages(sessionId);
+    
+    // Ensuite seulement inscrire l'utilisateur en tant que participant
     const participantRef = ref(db, `sessions/${sessionId}/participants/${userId}`);
     
     set(participantRef, {
@@ -165,10 +170,6 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     });
     
     setIsCreator(false); // S'assurer que cet utilisateur n'est pas marqué comme créateur
-    
-    // Écouter les messages et les participants
-    listenToSessionMessages(sessionId);
-    listenToParticipants(sessionId);
     
     setShowSessionOptions(false); // Fermer les options de session après avoir rejoint
   };
@@ -203,6 +204,8 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     onValue(participantsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        console.log("Participants mis à jour : ", data);
+        
         // Vérifier si l'utilisateur actuel est le créateur
         if (data[userId] && data[userId].isCreator) {
           setIsCreator(true);
@@ -214,6 +217,7 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
           .map(([, info]) => (info as any));
         
         if (otherParticipants.length > 0) {
+          console.log("Langue du partenaire détectée : ", otherParticipants[0].language);
           setPartnerLanguage(otherParticipants[0].language);
         }
       }
@@ -446,10 +450,16 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
 
   // Effet pour envoyer automatiquement le message après traduction
   useEffect(() => {
-    if (sessionId && detectedLanguage && Object.keys(translations).length > 0 && !isTranslating) {
+    if (
+      sessionId && 
+      detectedLanguage && 
+      Object.keys(translations).length > 0 && 
+      !isTranslating && 
+      partnerLanguage // Vérifier que partnerLanguage est défini
+    ) {
       sendMessage();
     }
-  }, [translations, isTranslating]);
+  }, [translations, isTranslating, partnerLanguage]); // Surveiller partnerLanguage
 
   // Noms des langues pour l'affichage
   const languageDisplay = {
@@ -593,7 +603,7 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
               <p className="font-medium">{msg.text}</p>
               
               {/* Afficher seulement la traduction pertinente pour l'utilisateur */}
-              {userLanguage && msg.sender !== userId && msg.sourceLanguage !== userLanguage && msg.translations[userLanguage] && (
+              {userLanguage && msg.sender !== userId && msg.sourceLanguage !== userLanguage && msg.translations && msg.translations[userLanguage] && (
                 <div className="mt-2 p-2 bg-white rounded border">
                   <p className="text-xs text-gray-500 mb-1">
                     {languageDisplay[userLanguage].flag} {languageDisplay[userLanguage].name}
