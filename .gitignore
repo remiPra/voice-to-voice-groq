@@ -22,12 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-# Ignorer les fichiers package-lock
-
-# Ignorer les fichiers de configuration Firebase potentiellement sensibles
-firebase-config.js
-firebaseConfig.js
-
-# Ignorer les autres fichiers sensibles
-*.key
-*.pem
