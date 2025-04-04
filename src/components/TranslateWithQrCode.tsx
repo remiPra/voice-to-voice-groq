@@ -38,6 +38,7 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [showLanguageSelection, setShowLanguageSelection] = useState<boolean>(true);
   const [showSessionOptions, setShowSessionOptions] = useState<boolean>(false);
+  const [isCreator, setIsCreator] = useState<boolean>(false);
 
   // États de base pour l'enregistrement et la traduction
   const [inputText, setInputText] = useState<string>("");
@@ -64,16 +65,6 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     
     setUserId(newUserId);
     
-    // Vérifier si on rejoint une session existante via URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionParam = urlParams.get('session');
-    
-    if (sessionParam) {
-      setSessionId(sessionParam);
-      setShowLanguageSelection(true);
-      setShowSessionOptions(false);
-    }
-    
     // Initialiser Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyAA2qFckzsZ8lNVTrZvDmeQ-i1tmAphmio",
@@ -83,12 +74,27 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
         messagingSenderId: "686646844992",
         appId: "1:686646844992:web:04c69fca0d86733f5609a5",
         measurementId: "G-NKX65TX5PH",
-        // Ajoutez cette ligne avec l'URL visible dans votre capture d'écran
         databaseURL: "https://translate-holiaday-default-rtdb.firebaseio.com"
     };    
     const app = initializeApp(firebaseConfig);
     const database = getDatabase(app);
     setDb(database);
+    
+    // Vérifier si on rejoint une session existante via URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionParam = urlParams.get('session');
+    
+    if (sessionParam) {
+      setSessionId(sessionParam);
+      setShowLanguageSelection(true);
+      setShowSessionOptions(false);
+      
+      // Commencer à écouter immédiatement les messages et participants
+      if (database) {
+        listenToSessionMessages(sessionParam);
+        listenToParticipants(sessionParam);
+      }
+    }
     
     return () => {
       // Nettoyer l'enregistrement audio
@@ -135,9 +141,11 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     });
     
     setSessionId(newSessionId);
+    setIsCreator(true); // Marquer cet utilisateur comme créateur
     
     // Écouter les messages de cette session
     listenToSessionMessages(newSessionId);
+    listenToParticipants(newSessionId);
     
     // Mettre à jour l'URL pour permettre le partage
     window.history.pushState({}, '', `?session=${newSessionId}`);
@@ -156,9 +164,13 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
       isCreator: false
     });
     
+    setIsCreator(false); // S'assurer que cet utilisateur n'est pas marqué comme créateur
+    
     // Écouter les messages et les participants
     listenToSessionMessages(sessionId);
     listenToParticipants(sessionId);
+    
+    setShowSessionOptions(false); // Fermer les options de session après avoir rejoint
   };
 
   // Écouter les messages d'une session
@@ -191,6 +203,11 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     onValue(participantsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        // Vérifier si l'utilisateur actuel est le créateur
+        if (data[userId] && data[userId].isCreator) {
+          setIsCreator(true);
+        }
+        
         // Trouver la langue de l'autre participant
         const otherParticipants = Object.entries(data)
           .filter(([id]) => id !== userId)
@@ -540,8 +557,8 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
         </div>
       )}
       
-      {/* QR Code pour rejoindre la session */}
-      {sessionId && userLanguage && !showLanguageSelection && !showSessionOptions && (
+      {/* QR Code pour le créateur de la session uniquement */}
+      {sessionId && userLanguage && !showLanguageSelection && !showSessionOptions && isCreator && (
         <div className="text-center mb-4">
           <h3 className="text-lg font-semibold mb-2">Partagez ce QR code</h3>
           <div className="bg-white p-3 inline-block rounded-lg">
@@ -551,6 +568,14 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
             />
           </div>
           <p className="mt-2 text-sm text-gray-600">Session ID: {sessionId}</p>
+        </div>
+      )}
+      
+      {/* Message pour l'utilisateur qui rejoint */}
+      {sessionId && userLanguage && !showLanguageSelection && !showSessionOptions && !isCreator && (
+        <div className="text-center mb-4 p-3 bg-green-100 rounded-lg">
+          <h3 className="text-lg font-semibold mb-1">Connecté à la conversation</h3>
+          <p className="text-sm text-gray-600">Vous pouvez maintenant communiquer avec votre interlocuteur</p>
         </div>
       )}
       
