@@ -23,7 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 # Ignorer les fichiers package-lock
-package-lock.json
 
 # Ignorer les fichiers de configuration Firebase potentiellement sensibles
 firebase-config.js
