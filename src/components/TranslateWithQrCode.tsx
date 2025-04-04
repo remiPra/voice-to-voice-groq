@@ -106,18 +106,26 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
 
   // Fonction pour détecter la langue
   const detectLanguage = (text: string): SupportedLanguage => {
-    // Détection simple pour le japonais (caractères japonais)
-    const hasJapaneseChars = /[\u3040-\u309F]|[\u30A0-\u30FF]/.test(text);
-    if (hasJapaneseChars) return "ja";
+    console.log("Détection de langue pour:", text);
+    
+    // Détection pour le japonais (caractères japonais)
+    const hasJapaneseChars = /[\u3040-\u309F]|[\u30A0-\u30FF]|[\u4E00-\u9FAF]/.test(text);
+    if (hasJapaneseChars) {
+      console.log("Langue détectée: japonais");
+      return "ja";
+    }
     
     // Détection pour le chinois (caractères chinois)
     const hasChineseChars = /[\u4e00-\u9fff]/.test(text);
-    if (hasChineseChars) return "zh";
+    if (hasChineseChars) {
+      console.log("Langue détectée: chinois");
+      return "zh";
+    }
     
     // Par défaut, considérer que c'est du français
+    console.log("Langue détectée par défaut: français");
     return "fr";
   };
-
   // Création d'une nouvelle session
   const createNewSession = () => {
     if (!db || !userLanguage) return;
@@ -128,11 +136,7 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     
     if (!newSessionId) return;
     
-    // Commencer à écouter immédiatement les messages et participants
-    listenToSessionMessages(newSessionId);
-    listenToParticipants(newSessionId);
-    
-    // Initialiser la session avec le premier participant
+    // Initialiser la session avec le premier participant ET un objet messages vide
     set(newSessionRef, {
       createdAt: Date.now(),
       participants: {
@@ -141,13 +145,16 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
           language: userLanguage,
           isCreator: true
         }
-      }
+      },
+      messages: {} // Ajout d'un objet messages vide
     });
     
     setSessionId(newSessionId);
-    setIsCreator(true); // Marquer cet utilisateur comme créateur
+    setIsCreator(true);
     
-    // Mettre à jour l'URL pour permettre le partage
+    listenToSessionMessages(newSessionId);
+    listenToParticipants(newSessionId);
+    
     window.history.pushState({}, '', `?session=${newSessionId}`);
     setShowSessionOptions(false);
   };
@@ -156,11 +163,6 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
   const joinExistingSession = () => {
     if (!db || !sessionId || !userLanguage) return;
     
-    // Commencer immédiatement à écouter les participants et les messages
-    listenToParticipants(sessionId);
-    listenToSessionMessages(sessionId);
-    
-    // Ensuite seulement inscrire l'utilisateur en tant que participant
     const participantRef = ref(db, `sessions/${sessionId}/participants/${userId}`);
     
     set(participantRef, {
@@ -171,17 +173,27 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     
     setIsCreator(false); // S'assurer que cet utilisateur n'est pas marqué comme créateur
     
+    // Écouter les messages et les participants
+    listenToSessionMessages(sessionId);
+    listenToParticipants(sessionId);
+    
     setShowSessionOptions(false); // Fermer les options de session après avoir rejoint
   };
 
   // Écouter les messages d'une session
   const listenToSessionMessages = (sid: string) => {
-    if (!db) return;
+    if (!db) {
+      console.error("Base de données non disponible pour écouter les messages");
+      return;
+    }
     
+    console.log("Écoute des messages pour la session:", sid);
     const messagesRef = ref(db, `sessions/${sid}/messages`);
     
     onValue(messagesRef, (snapshot) => {
       const data = snapshot.val();
+      console.log("Messages mis à jour:", data);
+      
       if (data) {
         const messageList = Object.entries(data).map(([id, msg]) => ({
           id,
@@ -190,22 +202,53 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
         
         // Trier par timestamp
         messageList.sort((a: any, b: any) => a.timestamp - b.timestamp);
+        console.log("Liste de messages mise à jour:", messageList);
         setMessages(messageList);
+      } else {
+        console.log("Aucun message dans cette session");
+        setMessages([]);
       }
     });
   };
+  useEffect(() => {
+    console.log("Effet déclenché - Conditions pour envoi auto:", {
+      sessionId,
+      detectedLanguage,
+      translationsCount: Object.keys(translations).length,
+      isTranslating
+    });
+    
+    if (
+      sessionId && 
+      detectedLanguage && 
+      inputText.trim() && 
+      !isTranslating
+    ) {
+      console.log("Conditions remplies pour envoi automatique");
+      // Un petit délai pour s'assurer que tout est prêt
+      const timer = setTimeout(() => {
+        sendMessage();
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [translations, isTranslating, detectedLanguage, sessionId]);
 
   // Écouter les participants
   const listenToParticipants = (sid: string) => {
-    if (!db) return;
+    if (!db) {
+      console.error("Base de données non disponible pour écouter les participants");
+      return;
+    }
     
+    console.log("Écoute des participants pour la session:", sid);
     const participantsRef = ref(db, `sessions/${sid}/participants`);
     
     onValue(participantsRef, (snapshot) => {
       const data = snapshot.val();
+      console.log("Participants mis à jour:", data);
+      
       if (data) {
-        console.log("Participants mis à jour : ", data);
-        
         // Vérifier si l'utilisateur actuel est le créateur
         if (data[userId] && data[userId].isCreator) {
           setIsCreator(true);
@@ -217,33 +260,52 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
           .map(([, info]) => (info as any));
         
         if (otherParticipants.length > 0) {
-          console.log("Langue du partenaire détectée : ", otherParticipants[0].language);
-          setPartnerLanguage(otherParticipants[0].language);
+          const otherLang = otherParticipants[0].language;
+          console.log("Langue du partenaire détectée:", otherLang);
+          setPartnerLanguage(otherLang);
+        } else {
+          console.log("Pas d'autre participant détecté");
         }
       }
     });
   };
-
   // Envoyer un message dans la session
   const sendMessage = () => {
-    if (!db || !sessionId || !inputText.trim() || !detectedLanguage) return;
+    console.log("Tentative d'envoi:", { sessionId, inputText, detectedLanguage });
     
-    const messagesRef = ref(db, `sessions/${sessionId}/messages`);
-    const newMessageRef = push(messagesRef);
+    if (!db || !sessionId || !inputText.trim() || !detectedLanguage) {
+      console.error("Impossible d'envoyer le message:", {
+        db: !!db,
+        sessionId,
+        inputText,
+        detectedLanguage
+      });
+      return;
+    }
     
-    set(newMessageRef, {
-      text: inputText,
-      translations,
-      sender: userId,
-      timestamp: Date.now(),
-      sourceLanguage: detectedLanguage
-    });
-    
-    // Réinitialiser l'entrée
-    setInputText("");
-    setTranslations({});
+    try {
+      const messagesRef = ref(db, `sessions/${sessionId}/messages`);
+      const newMessageRef = push(messagesRef);
+      
+      const messageData = {
+        text: inputText,
+        translations: translations || {},
+        sender: userId,
+        timestamp: Date.now(),
+        sourceLanguage: detectedLanguage
+      };
+      
+      console.log("Envoi du message:", messageData);
+      set(newMessageRef, messageData);
+      
+      // Réinitialiser l'entrée
+      setInputText("");
+      setTranslations({});
+      setDetectedLanguage(null);
+    } catch (error) {
+      console.error("Erreur lors de l'envoi du message:", error);
+    }
   };
-
   // Toggle enregistrement
   const startRecording = async (language: SupportedLanguage): Promise<void> => {
     if (isRecording) {
@@ -335,24 +397,28 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     
     try {
       let translationsToMake = [];
+      console.log("Process translations:", { sessionId, partnerLanguage, sourceLang });
       
       // Vérifier d'abord si nous sommes en session
       if (sessionId && partnerLanguage) {
-        // Traduire vers la langue du partenaire
-        translationsToMake.push({
-          target: partnerLanguage,
-          source: sourceLang
-        });
+        // Ne pas traduire si la langue source est identique à celle du partenaire
+        if (sourceLang !== partnerLanguage) {
+          console.log(`Traduction nécessaire: ${sourceLang} -> ${partnerLanguage}`);
+          translationsToMake.push({
+            target: partnerLanguage,
+            source: sourceLang
+          });
+        } else {
+          console.log("Langues identiques, pas besoin de traduction");
+        }
       } else {
         // Logique par défaut (sans session)
         if (sourceLang === "ja") {
-          // Si source japonaise, traduire en français ET en chinois
           translationsToMake = [
             { target: "fr", source: sourceLang },
             { target: "zh", source: sourceLang }
           ];
         } else {
-          // Si source française ou chinoise, traduire en japonais
           translationsToMake = [
             { target: "ja", source: sourceLang }
           ];
@@ -362,22 +428,25 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
       const newTranslations: {[key: string]: string} = {};
       
       // Effectuer toutes les traductions nécessaires
-      await Promise.all(
-        translationsToMake.map(async ({ source, target }) => {
-          if (source === target) return;
-          
-          const translation = await translateText(text, source, target as SupportedLanguage);
-          if (translation) {
-            newTranslations[target] = translation;
-          }
-        })
-      );
+      if (translationsToMake.length > 0) {
+        await Promise.all(
+          translationsToMake.map(async ({ source, target }) => {
+            if (source === target) return;
+            
+            console.log(`Traduction en cours: ${source} -> ${target}`);
+            const translation = await translateText(text, source, target as SupportedLanguage);
+            if (translation) {
+              newTranslations[target] = translation;
+              console.log(`Traduction réussie: ${target}`, translation);
+            }
+          })
+        );
+      }
       
       setTranslations(newTranslations);
       
-      // Si en session et traduction terminée, envoyer le message
-      if (sessionId && Object.keys(newTranslations).length > 0) {
-        // Préparation pour envoi automatique
+      // En session, nous définissons la langue détectée pour l'envoi ultérieur
+      if (sessionId) {
         setDetectedLanguage(sourceLang);
       }
     } catch (error) {
@@ -443,23 +512,19 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
     e.preventDefault();
     if (!inputText.trim() || isTranslating) return;
     
+    console.log("Soumission du formulaire avec texte:", inputText);
     const lang = detectLanguage(inputText);
+    console.log("Langue détectée:", lang);
     setDetectedLanguage(lang);
     await processTranslations(inputText, lang);
   };
 
   // Effet pour envoyer automatiquement le message après traduction
   useEffect(() => {
-    if (
-      sessionId && 
-      detectedLanguage && 
-      Object.keys(translations).length > 0 && 
-      !isTranslating && 
-      partnerLanguage // Vérifier que partnerLanguage est défini
-    ) {
+    if (sessionId && detectedLanguage && Object.keys(translations).length > 0 && !isTranslating) {
       sendMessage();
     }
-  }, [translations, isTranslating, partnerLanguage]); // Surveiller partnerLanguage
+  }, [translations, isTranslating]);
 
   // Noms des langues pour l'affichage
   const languageDisplay = {
@@ -603,7 +668,7 @@ const TraducteurVacancesWithQrCode: React.FC = () => {
               <p className="font-medium">{msg.text}</p>
               
               {/* Afficher seulement la traduction pertinente pour l'utilisateur */}
-              {userLanguage && msg.sender !== userId && msg.sourceLanguage !== userLanguage && msg.translations && msg.translations[userLanguage] && (
+              {userLanguage && msg.sender !== userId && msg.sourceLanguage !== userLanguage && msg.translations[userLanguage] && (
                 <div className="mt-2 p-2 bg-white rounded border">
                   <p className="text-xs text-gray-500 mb-1">
                     {languageDisplay[userLanguage].flag} {languageDisplay[userLanguage].name}
