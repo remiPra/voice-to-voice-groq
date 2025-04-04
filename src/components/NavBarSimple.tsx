@@ -83,6 +83,13 @@ const Navbar = () => {
               className="hover:text-gray-300"
             >
               English
+            </Link>
+            <Link
+              to="/vacances"
+              onClick={() => setDrawerOpen(false)}
+              className="hover:text-gray-300"
+            >
+              Vacances avec le qr code 
             </Link> 
             <Link
               to="/chinois"
