@@ -157,28 +157,72 @@ const SimpleChatApp: React.FC = () => {
   };
 
   // Fonction pour définir la langue et terminer l'initialisation
-  const setLanguageAndContinue = async (language: SupportedLanguage): Promise<void> => {
-    if (!db || !sessionId || !language) return;
+  // Ajoutez cet effet pour relancer les traductions quand userLanguage change
+useEffect(() => {
+  if (userLanguage && messages.length > 0) {
+    console.log("userLanguage a changé, relance des traductions:", userLanguage);
     
-    try {
-      // Ajouter l'utilisateur aux participants avec sa langue
-      await setDoc(doc(db, "chat_sessions", sessionId, "participants", userId), {
-        joinedAt: serverTimestamp(),
-        isCreator: isCreator,
-        language: language
+    // Parcourir tous les messages existants pour traduire ceux nécessaires
+    const messagesToTranslate = messages.filter(msg => 
+      msg.sender !== userId && 
+      msg.language !== userLanguage &&
+      (!messageTranslations[msg.id] || !messageTranslations[msg.id][userLanguage])
+    );
+    
+    console.log("Messages à traduire après changement de langue:", messagesToTranslate.length);
+    
+    messagesToTranslate.forEach(async (msg) => {
+      if (!msg.language) return;
+      
+      console.log(`Traduction suite au changement de langue (ID: ${msg.id}):`, {
+        text: msg.text,
+        from: msg.language,
+        to: userLanguage
       });
       
-      setUserLanguage(language);
-      setStep("chat");
+      const translation = await translateText(msg.text, msg.language, userLanguage);
       
-      // Écouter les messages et participants
-      listenToMessages(db, sessionId);
-      listenToParticipants(db, sessionId);
-    } catch (error) {
-      console.error("Erreur lors de l'enregistrement de la langue:", error);
-      alert("Erreur lors de l'enregistrement des préférences. Veuillez réessayer.");
-    }
-  };
+      if (translation) {
+        setMessageTranslations(prev => ({
+          ...prev,
+          [msg.id]: {
+            ...(prev[msg.id] || {}),
+            [userLanguage]: translation
+          }
+        }));
+      }
+    });
+  }
+}, [userLanguage, messages]);
+
+// Modifiez la fonction setLanguageAndContinue pour s'assurer que userLanguage est défini avant d'écouter les messages
+const setLanguageAndContinue = async (language: SupportedLanguage): Promise<void> => {
+  if (!db || !sessionId || !language) return;
+  
+  try {
+    console.log("Définition de la langue utilisateur:", language);
+    
+    // Définir d'abord la langue
+    setUserLanguage(language);
+    
+    // Ajouter l'utilisateur aux participants avec sa langue
+    await setDoc(doc(db, "chat_sessions", sessionId, "participants", userId), {
+      joinedAt: serverTimestamp(),
+      isCreator: isCreator,
+      language: language
+    });
+    
+    // Important: passer à l'écran de chat après avoir défini la langue
+    setStep("chat");
+    
+    // Écouter les messages et participants maintenant que la langue est définie
+    listenToMessages(db, sessionId);
+    listenToParticipants(db, sessionId);
+  } catch (error) {
+    console.error("Erreur lors de l'enregistrement de la langue:", error);
+    alert("Erreur lors de l'enregistrement des préférences. Veuillez réessayer.");
+  }
+};
 
   // Écouter les messages
   // Écouter les messages
