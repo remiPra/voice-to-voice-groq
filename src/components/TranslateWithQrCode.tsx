@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, addDoc, query, orderBy, serverTimestamp, Firestore } from "firebase/firestore";
 import QRCode from "react-qr-code";
+import { FaMicrophone } from "react-icons/fa";
+import { BiMicrophoneOff } from "react-icons/bi";
+
+// Type pour les langues supportées
+type SupportedLanguage = "fr" | "ja" | "zh" | "en" | null;
 
 // Interface pour les messages
 interface Message {
@@ -10,12 +15,20 @@ interface Message {
   sender: string;
   timestamp: any;
   clientTimestamp: number;
+  language: SupportedLanguage;
 }
 
 // Interface pour les participants
+//@ts-ignore
 interface Participant {
   joinedAt: any;
   isCreator: boolean;
+  language: SupportedLanguage;
+}
+
+// Interface pour les résultats de transcription
+interface TranscriptionResult {
+  text: string;
 }
 
 const SimpleChatApp: React.FC = () => {
@@ -28,7 +41,14 @@ const SimpleChatApp: React.FC = () => {
   const [isCreator, setIsCreator] = useState<boolean>(false);
   //@ts-ignore
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [step, setStep] = useState<"init" | "chat">("init"); // 'init', 'chat'
+  const [step, setStep] = useState<"init" | "language" | "chat">("init");
+  const [userLanguage, setUserLanguage] = useState<SupportedLanguage>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  
+  // Références pour l'enregistrement audio
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Initialisation Firebase et userId
   useEffect(() => {
@@ -62,8 +82,15 @@ const SimpleChatApp: React.FC = () => {
       setSessionId(sessionParam);
       setTimeout(() => {
         joinSession(firestore, sessionParam, newUserId);
-      }, 500); // Petit délai pour s'assurer que db est initialisé
+      }, 500);
     }
+    
+    // Nettoyage de l'enregistrement audio à la fermeture
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   // Fonction pour créer une nouvelle session
@@ -81,23 +108,13 @@ const SimpleChatApp: React.FC = () => {
       const newSessionId = sessionRef.id;
       console.log("Session créée:", newSessionId);
       
-      // Ajouter l'utilisateur comme participant
-      await setDoc(doc(db, "chat_sessions", newSessionId, "participants", userId), {
-        joinedAt: serverTimestamp(),
-        isCreator: true
-      });
-      
       setSessionId(newSessionId);
       setIsCreator(true);
       setIsConnected(true);
-      setStep("chat");
+      setStep("language"); // Passer à la sélection de langue
       
       // Mettre à jour l'URL
       window.history.pushState({}, "", `?session=${newSessionId}`);
-      
-      // Écouter les messages
-      listenToMessages(db, newSessionId);
-      listenToParticipants(db, newSessionId);
     } catch (error) {
       console.error("Erreur lors de la création de la session:", error);
       alert("Erreur lors de la création de la session. Veuillez réessayer.");
@@ -115,22 +132,10 @@ const SimpleChatApp: React.FC = () => {
       
       if (sessionDoc.exists()) {
         console.log("Session trouvée:", sessionDoc.data());
-        
-        // Ajouter l'utilisateur aux participants
-        await setDoc(doc(database, "chat_sessions", sid, "participants", uid), {
-          joinedAt: serverTimestamp(),
-          isCreator: false
-        });
-        
-        console.log("Participant ajouté à la session");
         setSessionId(sid);
-        setIsCreator(false);
+        setIsCreator(sessionDoc.data().createdBy === uid);
         setIsConnected(true);
-        setStep("chat");
-        
-        // Écouter les messages et participants
-        listenToMessages(database, sid);
-        listenToParticipants(database, sid);
+        setStep("language"); // Passer à la sélection de langue
       } else {
         console.error("Session introuvable:", sid);
         alert("Session introuvable. Vérifiez l'ID ou créez-en une nouvelle.");
@@ -138,6 +143,30 @@ const SimpleChatApp: React.FC = () => {
     } catch (error) {
       console.error("Erreur lors de la vérification de la session:", error);
       alert("Erreur lors de la connexion à la session. Veuillez réessayer.");
+    }
+  };
+
+  // Fonction pour définir la langue et terminer l'initialisation
+  const setLanguageAndContinue = async (language: SupportedLanguage): Promise<void> => {
+    if (!db || !sessionId || !language) return;
+    
+    try {
+      // Ajouter l'utilisateur aux participants avec sa langue
+      await setDoc(doc(db, "chat_sessions", sessionId, "participants", userId), {
+        joinedAt: serverTimestamp(),
+        isCreator: isCreator,
+        language: language
+      });
+      
+      setUserLanguage(language);
+      setStep("chat");
+      
+      // Écouter les messages et participants
+      listenToMessages(db, sessionId);
+      listenToParticipants(db, sessionId);
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement de la langue:", error);
+      alert("Erreur lors de l'enregistrement des préférences. Veuillez réessayer.");
     }
   };
 
@@ -178,14 +207,6 @@ const SimpleChatApp: React.FC = () => {
     
     const unsubscribe = onSnapshot(participantsRef, (querySnapshot) => {
       console.log("Participants mis à jour, nombre:", querySnapshot.size);
-      
-      // Vérifier si l'utilisateur actuel est le créateur
-      querySnapshot.forEach((doc) => {
-        const participantData = doc.data() as Participant;
-        if (doc.id === userId && participantData.isCreator) {
-          setIsCreator(true);
-        }
-      });
     }, (error) => {
       console.error("Erreur d'écoute des participants:", error);
     });
@@ -196,7 +217,7 @@ const SimpleChatApp: React.FC = () => {
   // Envoyer un message
   const sendMessage = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    if (!db || !sessionId || !message.trim()) return;
+    if (!db || !sessionId || !message.trim() || !userLanguage) return;
 
     try {
       console.log("Envoi du message:", message);
@@ -204,7 +225,8 @@ const SimpleChatApp: React.FC = () => {
         text: message,
         sender: userId,
         timestamp: serverTimestamp(),
-        clientTimestamp: Date.now() // Pour le tri immédiat côté client
+        clientTimestamp: Date.now(),
+        language: userLanguage
       });
       
       console.log("Message envoyé avec succès");
@@ -215,11 +237,116 @@ const SimpleChatApp: React.FC = () => {
     }
   };
 
-  // Affichage selon l'étape
+  // Démarrer l'enregistrement audio
+  const startRecording = async (): Promise<void> => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    
+    try {
+      if (!streamRef.current) {
+        streamRef.current = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
+      }
+      
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = new MediaRecorder(streamRef.current);
+      
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        await transcribeAudio(audioBlob);
+      };
+      
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Erreur d'accès au microphone:", err);
+      alert("Impossible d'accéder au microphone. Vérifiez les permissions.");
+    }
+  };
+
+  // Arrêter l'enregistrement
+  const stopRecording = (): void => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  // Transcription audio avec Groq
+  const transcribeAudio = async (audioBlob: Blob): Promise<void> => {
+    if (!db || !sessionId || !userLanguage) return;
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", audioBlob, "audio.webm");
+      formData.append("model", "whisper-large-v3-turbo");
+      formData.append("response_format", "json");
+      
+      // Si connu, fournir la langue à Whisper
+      if (userLanguage) {
+        const langCode = userLanguage === "fr" ? "fr" : 
+                        userLanguage === "ja" ? "ja" : 
+                        userLanguage === "zh" ? "zh" : "en";
+        formData.append("language", langCode);
+      }
+      
+      const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+        },
+        body: formData
+      });
+      
+      const result = await response.json() as TranscriptionResult;
+      
+      if (result.text) {
+        // Envoi du message transcrit
+        await addDoc(collection(db, "chat_sessions", sessionId, "messages"), {
+          text: result.text,
+          sender: userId,
+          timestamp: serverTimestamp(),
+          clientTimestamp: Date.now(),
+          language: userLanguage
+        });
+      }
+    } catch (error) {
+      console.error("Erreur de transcription:", error);
+      alert("Erreur lors de la transcription audio. Veuillez réessayer.");
+    }
+  };
+
+  // Drapeaux pour les langues
+  const languageFlags = {
+    fr: "🇫🇷",
+    ja: "🇯🇵",
+    zh: "🇨🇳",
+    en: "🇬🇧"
+  };
+  
+  // Noms des langues
+  // @ts-ignore
+  const languageNames = {
+    fr: "Français",
+    ja: "Japonais",
+    zh: "Chinois",
+    en: "Anglais"
+  };
+
+  // Écran de sélection initiale
   if (step === "init") {
     return (
       <div className="w-full max-w-md mx-auto my-4 p-4 bg-white rounded-lg shadow-lg">
-        <h1 className="text-xl font-bold text-center mb-4">Chat Simple</h1>
+        <h1 className="text-xl font-bold text-center mb-4">Chat Multilingue</h1>
         
         <button
           onClick={createSession}
@@ -254,9 +381,55 @@ const SimpleChatApp: React.FC = () => {
     );
   }
 
+  // Écran de sélection de langue
+  if (step === "language") {
+    return (
+      <div className="w-full max-w-md mx-auto my-4 p-4 bg-white rounded-lg shadow-lg">
+        <h1 className="text-xl font-bold text-center mb-4">Choisissez votre langue</h1>
+        
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <button
+            onClick={() => setLanguageAndContinue("fr")}
+            className="flex flex-col items-center justify-center p-4 border rounded-lg hover:bg-blue-50"
+          >
+            <span className="text-4xl mb-2">🇫🇷</span>
+            <span>Français</span>
+          </button>
+          
+          <button
+            onClick={() => setLanguageAndContinue("en")}
+            className="flex flex-col items-center justify-center p-4 border rounded-lg hover:bg-blue-50"
+          >
+            <span className="text-4xl mb-2">🇬🇧</span>
+            <span>Anglais</span>
+          </button>
+          
+          <button
+            onClick={() => setLanguageAndContinue("ja")}
+            className="flex flex-col items-center justify-center p-4 border rounded-lg hover:bg-blue-50"
+          >
+            <span className="text-4xl mb-2">🇯🇵</span>
+            <span>Japonais</span>
+          </button>
+          
+          <button
+            onClick={() => setLanguageAndContinue("zh")}
+            className="flex flex-col items-center justify-center p-4 border rounded-lg hover:bg-blue-50"
+          >
+            <span className="text-4xl mb-2">🇨🇳</span>
+            <span>Chinois</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Écran de chat
   return (
     <div className="w-full max-w-md mx-auto my-4 p-4 bg-white rounded-lg shadow-lg">
-      <h1 className="text-xl font-bold text-center mb-2">Chat en direct</h1>
+      <h1 className="text-xl font-bold text-center mb-2">
+        Chat Multilingue {userLanguage && languageFlags[userLanguage]}
+      </h1>
       
       {isCreator && (
         <div className="text-center mb-4">
@@ -286,7 +459,12 @@ const SimpleChatApp: React.FC = () => {
                   : "bg-gray-100 mr-8"
               }`}
             >
-              <p className="text-sm break-words">{msg.text}</p>
+              <p className="text-sm flex items-center">
+                {msg.language && (
+                  <span className="mr-2">{languageFlags[msg.language]}</span>
+                )}
+                <span className="break-words">{msg.text}</span>
+              </p>
               <p className="text-xs text-gray-500">
                 {new Date(msg.clientTimestamp || Date.now()).toLocaleTimeString()}
               </p>
@@ -295,22 +473,42 @@ const SimpleChatApp: React.FC = () => {
         )}
       </div>
       
-      <form onSubmit={sendMessage} className="flex items-center">
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Tapez votre message ici..."
-          className="flex-1 p-2 border rounded-l-lg"
-        />
+      <div className="flex items-center mb-2">
         <button
-          type="submit"
-          className="bg-blue-500 text-white py-2 px-4 rounded-r-lg hover:bg-blue-600"
-          disabled={!message.trim()}
+          onClick={startRecording}
+          className={`mr-2 p-2 rounded-full ${
+            isRecording ? "bg-red-500 text-white" : "bg-gray-200"
+          }`}
+          title={isRecording ? "Arrêter l'enregistrement" : "Enregistrer un message vocal"}
         >
-          Envoyer
+          {isRecording ? <BiMicrophoneOff size={20} /> : <FaMicrophone size={20} />}
         </button>
-      </form>
+        
+        <form onSubmit={sendMessage} className="flex-1 flex">
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Tapez votre message ici..."
+            className="flex-1 p-2 border rounded-l-lg"
+            disabled={isRecording}
+          />
+          <button
+            type="submit"
+            className="bg-blue-500 text-white py-2 px-4 rounded-r-lg hover:bg-blue-600"
+            disabled={!message.trim() || isRecording}
+          >
+            Envoyer
+          </button>
+        </form>
+      </div>
+      
+      {isRecording && (
+        <div className="p-2 bg-red-100 text-red-800 rounded-lg text-sm flex items-center">
+          <div className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></div>
+          Enregistrement en cours... Cliquez sur le microphone pour terminer.
+        </div>
+      )}
     </div>
   );
 };
