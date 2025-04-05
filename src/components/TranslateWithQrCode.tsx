@@ -181,71 +181,112 @@ const SimpleChatApp: React.FC = () => {
   };
 
   // Écouter les messages
-  const listenToMessages = (database: Firestore, sid: string): (() => void) => {
-    if (!database || !sid) return () => {};
-    console.log("Écoute des messages pour la session:", sid);
+  // Écouter les messages
+const listenToMessages = (database: Firestore, sid: string): (() => void) => {
+  if (!database || !sid) return () => {};
+  console.log("Écoute des messages pour la session:", sid);
+  console.log("Langue de l'utilisateur actuel:", userLanguage);
 
-    const messagesQuery = query(
-      collection(database, "chat_sessions", sid, "messages"),
-      orderBy("timestamp", "asc")
-    );
+  const messagesQuery = query(
+    collection(database, "chat_sessions", sid, "messages"),
+    orderBy("timestamp", "asc")
+  );
+  
+  const unsubscribe = onSnapshot(messagesQuery, (querySnapshot) => {
+    console.log("=== Nouveaux messages reçus ===");
+    const messageList: Message[] = [];
+    const translationsToFetch: {messageId: string, text: string, sourceLang: SupportedLanguage, targetLang: SupportedLanguage}[] = [];
     
-    const unsubscribe = onSnapshot(messagesQuery, (querySnapshot) => {
-      const messageList: Message[] = [];
-      const translationsToFetch: {messageId: string, text: string, sourceLang: SupportedLanguage, targetLang: SupportedLanguage}[] = [];
+    querySnapshot.forEach((doc) => {
+      const messageData = doc.data();
+      console.log(`Message reçu (ID: ${doc.id}):`, messageData);
       
-      querySnapshot.forEach((doc) => {
-        const messageData = doc.data();
-        messageList.push({
-          id: doc.id,
-          ...messageData
-        } as Message);
+      messageList.push({
+        id: doc.id,
+        ...messageData
+      } as Message);
+      
+      // Si le message est dans une langue différente de celle de l'utilisateur
+      // et qu'on n'a pas encore de traduction, on ajoute à la file d'attente
+      if (messageData.language !== userLanguage && messageData.sender !== userId) {
+        const msgId = doc.id;
+        console.log(`Message à traduire détecté (ID: ${msgId}):`);
+        console.log(`- Langue source: ${messageData.language}`);
+        console.log(`- Langue cible: ${userLanguage}`);
+        console.log(`- Contenu: "${messageData.text}"`);
         
-        // Si le message est dans une langue différente de celle de l'utilisateur
-        // et qu'on n'a pas encore de traduction, on ajoute à la file d'attente
-        if (messageData.language !== userLanguage && messageData.sender !== userId) {
-          const msgId = doc.id;
-          
-          // Vérifier si on a déjà cette traduction
-          if (!messageTranslations[msgId] || !messageTranslations[msgId][userLanguage as string]) {
-            translationsToFetch.push({
-              messageId: msgId,
-              text: messageData.text,
-              sourceLang: messageData.language as SupportedLanguage,
-              targetLang: userLanguage as SupportedLanguage
-            });
-          }
+        // Vérifier si on a déjà cette traduction
+        const existingTranslation = messageTranslations[msgId]?.[userLanguage as string];
+        console.log(`- Traduction existante: ${existingTranslation ? `"${existingTranslation}"` : "aucune"}`);
+        
+        if (!existingTranslation) {
+          console.log(`- Ajout à la file de traduction`);
+          translationsToFetch.push({
+            messageId: msgId,
+            text: messageData.text,
+            sourceLang: messageData.language as SupportedLanguage,
+            targetLang: userLanguage as SupportedLanguage
+          });
         }
-      });
-      
-      setMessages(messageList);
-      
-      // Traiter les traductions en file d'attente
-      if (translationsToFetch.length > 0 && userLanguage) {
-        translationsToFetch.forEach(async ({ messageId, text, sourceLang, targetLang }) => {
-          if (!sourceLang || !targetLang) return;
-          
-          setIsTranslating(true);
-          const translation = await translateText(text, sourceLang, targetLang);
-          setIsTranslating(false);
-          
-          if (translation) {
-            setMessageTranslations(prev => ({
-              ...prev,
-              [messageId]: {
-                ...(prev[messageId] || {}),
-                [targetLang]: translation
-              }
-            }));
-          }
-        });
       }
-    }, (error) => {
-      console.error("Erreur d'écoute des messages:", error);
     });
     
-    return unsubscribe;
-  };
+    console.log(`Total des messages: ${messageList.length}`);
+    console.log(`Messages à traduire: ${translationsToFetch.length}`);
+    setMessages(messageList);
+    
+    // Traiter les traductions en file d'attente immédiatement
+    if (translationsToFetch.length > 0 && userLanguage) {
+      console.log("=== Démarrage des traductions ===");
+      
+      translationsToFetch.forEach(async ({ messageId, text, sourceLang, targetLang }) => {
+        if (!sourceLang || !targetLang) {
+          console.log(`Erreur: langue source ou cible manquante pour le message ${messageId}`);
+          return;
+        }
+        
+        console.log(`Traduction en cours pour message ${messageId}:`);
+        console.log(`- De: ${sourceLang} (${text})`);
+        console.log(`- Vers: ${targetLang}`);
+        
+        setIsTranslating(true);
+        
+        try {
+          console.log("Appel API de traduction...");
+          const translation = await translateText(text, sourceLang, targetLang);
+          console.log(`Réponse de l'API:`, translation);
+          
+          if (translation) {
+            console.log(`Traduction réussie: "${translation}"`);
+            
+            // Mettre à jour immédiatement les traductions
+            setMessageTranslations(prev => {
+              const newTranslations = {
+                ...prev,
+                [messageId]: {
+                  ...(prev[messageId] || {}),
+                  [targetLang]: translation
+                }
+              };
+              console.log("État des traductions mis à jour:", newTranslations);
+              return newTranslations;
+            });
+          } else {
+            console.log("La traduction a échoué ou est vide");
+          }
+        } catch (error) {
+          console.error("Erreur pendant la traduction:", error);
+        } finally {
+          setIsTranslating(false);
+        }
+      });
+    }
+  }, (error) => {
+    console.error("Erreur d'écoute des messages:", error);
+  });
+  
+  return unsubscribe;
+};
 
   // Écouter les participants
   const listenToParticipants = (database: Firestore, sid: string): (() => void) => {
@@ -378,43 +419,81 @@ const SimpleChatApp: React.FC = () => {
   };
 
   // Traduction du texte
-  const translateText = async (text: string, sourceLang: SupportedLanguage, targetLang: SupportedLanguage): Promise<string | null> => {
-    if (!text.trim() || sourceLang === targetLang || !sourceLang || !targetLang) return null;
+  // Traduction du texte
+const translateText = async (text: string, sourceLang: SupportedLanguage, targetLang: SupportedLanguage): Promise<string | null> => {
+  console.log(`=== Début de traduction ===`);
+  console.log(`- Texte source: "${text}"`);
+  console.log(`- De: ${sourceLang} vers ${targetLang}`);
+  
+  if (!text.trim()) {
+    console.log("Texte vide, traduction annulée");
+    return null;
+  }
+  
+  if (sourceLang === targetLang) {
+    console.log("Langues identiques, traduction inutile");
+    return null;
+  }
+  
+  if (!sourceLang || !targetLang) {
+    console.log("Langue source ou cible non définie");
+    return null;
+  }
+  
+  try {
+    // Préparation des noms des langues pour le prompt
+    const languageNames = {
+      fr: "français",
+      ja: "japonais",
+      zh: "chinois",
+      en: "anglais"
+    };
     
-    try {
-      // Préparation des noms des langues pour le prompt
-      const languageNames = {
-        fr: "français",
-        ja: "japonais",
-        zh: "chinois",
-        en: "anglais"
-      };
-      
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content: `Tu es un traducteur professionnel. Traduis uniquement le texte suivant du ${languageNames[sourceLang]} vers le ${languageNames[targetLang]}. Ne fournis que la traduction, sans explications.`
-            },
-            { role: "user", content: text }
-          ],
-          model: "gemma2-9b-it"
-        })
-      });
-      
-      const data = await response.json() as GroqResponse;
-      return data.choices[0].message.content;
-    } catch (error) {
-      console.error(`Erreur de traduction (${sourceLang} -> ${targetLang}):`, error);
-      return null;
+    console.log(`Préparation de la requête API Groq:`);
+    console.log(`- Modèle: gemma2-9b-it`);
+    console.log(`- Traduction: ${languageNames[sourceLang]} -> ${languageNames[targetLang]}`);
+    
+    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+    console.log(`- Clé API disponible: ${apiKey ? "Oui" : "Non"}`);
+    
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "system",
+            content: `Tu es un traducteur professionnel. Traduis uniquement le texte suivant du ${languageNames[sourceLang]} vers le ${languageNames[targetLang]}. Ne fournis que la traduction, sans explications.`
+          },
+          { role: "user", content: text }
+        ],
+        model: "gemma2-9b-it"
+      })
+    });
+    
+    console.log(`Statut de la réponse API: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Erreur API:", errorText);
+      throw new Error(`Erreur API: ${response.status} ${errorText}`);
     }
-  };
+    
+    const data = await response.json() as GroqResponse;
+    console.log("Réponse API complète:", data);
+    
+    const translatedText = data.choices[0].message.content;
+    console.log(`Traduction obtenue: "${translatedText}"`);
+    
+    return translatedText;
+  } catch (error) {
+    console.error(`Erreur de traduction (${sourceLang} -> ${targetLang}):`, error);
+    return null;
+  }
+};
 
   // Drapeaux pour les langues
   const languageFlags = {
