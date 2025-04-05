@@ -31,6 +31,14 @@ interface TranscriptionResult {
   text: string;
 }
 
+interface GroqResponse {
+  choices: {
+    message: {
+      content: string;
+    };
+  }[];
+}
+
 const SimpleChatApp: React.FC = () => {
   // États de base
   const [db, setDb] = useState<Firestore | null>(null);
@@ -38,12 +46,14 @@ const SimpleChatApp: React.FC = () => {
   const [sessionId, setSessionId] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [messageTranslations, setMessageTranslations] = useState<{[key: string]: {[lang: string]: string}}>({});
   const [isCreator, setIsCreator] = useState<boolean>(false);
   //@ts-ignore
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [step, setStep] = useState<"init" | "language" | "chat">("init");
   const [userLanguage, setUserLanguage] = useState<SupportedLanguage>(null);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isTranslating, setIsTranslating] = useState<boolean>(false);
   
   // Références pour l'enregistrement audio
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -182,15 +192,54 @@ const SimpleChatApp: React.FC = () => {
     
     const unsubscribe = onSnapshot(messagesQuery, (querySnapshot) => {
       const messageList: Message[] = [];
+      const translationsToFetch: {messageId: string, text: string, sourceLang: SupportedLanguage, targetLang: SupportedLanguage}[] = [];
+      
       querySnapshot.forEach((doc) => {
+        const messageData = doc.data();
         messageList.push({
           id: doc.id,
-          ...doc.data()
+          ...messageData
         } as Message);
+        
+        // Si le message est dans une langue différente de celle de l'utilisateur
+        // et qu'on n'a pas encore de traduction, on ajoute à la file d'attente
+        if (messageData.language !== userLanguage && messageData.sender !== userId) {
+          const msgId = doc.id;
+          
+          // Vérifier si on a déjà cette traduction
+          if (!messageTranslations[msgId] || !messageTranslations[msgId][userLanguage as string]) {
+            translationsToFetch.push({
+              messageId: msgId,
+              text: messageData.text,
+              sourceLang: messageData.language as SupportedLanguage,
+              targetLang: userLanguage as SupportedLanguage
+            });
+          }
+        }
       });
       
-      console.log("Messages reçus:", messageList.length);
       setMessages(messageList);
+      
+      // Traiter les traductions en file d'attente
+      if (translationsToFetch.length > 0 && userLanguage) {
+        translationsToFetch.forEach(async ({ messageId, text, sourceLang, targetLang }) => {
+          if (!sourceLang || !targetLang) return;
+          
+          setIsTranslating(true);
+          const translation = await translateText(text, sourceLang, targetLang);
+          setIsTranslating(false);
+          
+          if (translation) {
+            setMessageTranslations(prev => ({
+              ...prev,
+              [messageId]: {
+                ...(prev[messageId] || {}),
+                [targetLang]: translation
+              }
+            }));
+          }
+        });
+      }
     }, (error) => {
       console.error("Erreur d'écoute des messages:", error);
     });
@@ -284,6 +333,7 @@ const SimpleChatApp: React.FC = () => {
   // Transcription audio avec Groq
   const transcribeAudio = async (audioBlob: Blob): Promise<void> => {
     if (!db || !sessionId || !userLanguage) return;
+    setIsTranslating(true);
     
     try {
       const formData = new FormData();
@@ -322,6 +372,47 @@ const SimpleChatApp: React.FC = () => {
     } catch (error) {
       console.error("Erreur de transcription:", error);
       alert("Erreur lors de la transcription audio. Veuillez réessayer.");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // Traduction du texte
+  const translateText = async (text: string, sourceLang: SupportedLanguage, targetLang: SupportedLanguage): Promise<string | null> => {
+    if (!text.trim() || sourceLang === targetLang || !sourceLang || !targetLang) return null;
+    
+    try {
+      // Préparation des noms des langues pour le prompt
+      const languageNames = {
+        fr: "français",
+        ja: "japonais",
+        zh: "chinois",
+        en: "anglais"
+      };
+      
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content: `Tu es un traducteur professionnel. Traduis uniquement le texte suivant du ${languageNames[sourceLang]} vers le ${languageNames[targetLang]}. Ne fournis que la traduction, sans explications.`
+            },
+            { role: "user", content: text }
+          ],
+          model: "gemma2-9b-it"
+        })
+      });
+      
+      const data = await response.json() as GroqResponse;
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error(`Erreur de traduction (${sourceLang} -> ${targetLang}):`, error);
+      return null;
     }
   };
 
@@ -334,7 +425,7 @@ const SimpleChatApp: React.FC = () => {
   };
   
   // Noms des langues
-  // @ts-ignore
+  //@ts-ignore
   const languageNames = {
     fr: "Français",
     ja: "Japonais",
@@ -450,26 +541,49 @@ const SimpleChatApp: React.FC = () => {
             Aucun message. Commencez la conversation!
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`p-2 rounded-lg mb-2 ${
-                msg.sender === userId
-                  ? "bg-blue-100 ml-8 text-right"
-                  : "bg-gray-100 mr-8"
-              }`}
-            >
-              <p className="text-sm flex items-center">
-                {msg.language && (
-                  <span className="mr-2">{languageFlags[msg.language]}</span>
+          messages.map((msg) => {
+            // Déterminer le texte à afficher (original ou traduit)
+            let displayText = msg.text;
+            let isTranslated = false;
+            
+            // Si ce n'est pas notre message et qu'il est dans une autre langue, utiliser la traduction
+            if (msg.sender !== userId && msg.language !== userLanguage) {
+              const translatedText = messageTranslations[msg.id]?.[userLanguage as string];
+              if (translatedText) {
+                displayText = translatedText;
+                isTranslated = true;
+              }
+            }
+            
+            return (
+              <div
+                key={msg.id}
+                className={`p-2 rounded-lg mb-2 ${
+                  msg.sender === userId
+                    ? "bg-blue-100 ml-8 text-right"
+                    : "bg-gray-100 mr-8"
+                }`}
+              >
+                <p className="text-sm flex items-center">
+                  {msg.language && (
+                    <span className="mr-2">{languageFlags[msg.language]}</span>
+                  )}
+                  <span className="break-words">{displayText}</span>
+                </p>
+                
+                {/* Si ce message a été traduit, afficher un indicateur */}
+                {isTranslated && (
+                  <p className="text-xs text-gray-500 italic">
+                    Traduit automatiquement
+                  </p>
                 )}
-                <span className="break-words">{msg.text}</span>
-              </p>
-              <p className="text-xs text-gray-500">
-                {new Date(msg.clientTimestamp || Date.now()).toLocaleTimeString()}
-              </p>
-            </div>
-          ))
+                
+                <p className="text-xs text-gray-500">
+                  {new Date(msg.clientTimestamp || Date.now()).toLocaleTimeString()}
+                </p>
+              </div>
+            );
+          })
         )}
       </div>
       
@@ -480,6 +594,7 @@ const SimpleChatApp: React.FC = () => {
             isRecording ? "bg-red-500 text-white" : "bg-gray-200"
           }`}
           title={isRecording ? "Arrêter l'enregistrement" : "Enregistrer un message vocal"}
+          disabled={isTranslating}
         >
           {isRecording ? <BiMicrophoneOff size={20} /> : <FaMicrophone size={20} />}
         </button>
@@ -491,12 +606,12 @@ const SimpleChatApp: React.FC = () => {
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Tapez votre message ici..."
             className="flex-1 p-2 border rounded-l-lg"
-            disabled={isRecording}
+            disabled={isRecording || isTranslating}
           />
           <button
             type="submit"
             className="bg-blue-500 text-white py-2 px-4 rounded-r-lg hover:bg-blue-600"
-            disabled={!message.trim() || isRecording}
+            disabled={!message.trim() || isRecording || isTranslating}
           >
             Envoyer
           </button>
@@ -507,6 +622,13 @@ const SimpleChatApp: React.FC = () => {
         <div className="p-2 bg-red-100 text-red-800 rounded-lg text-sm flex items-center">
           <div className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></div>
           Enregistrement en cours... Cliquez sur le microphone pour terminer.
+        </div>
+      )}
+      
+      {isTranslating && (
+        <div className="p-2 bg-blue-100 text-blue-800 rounded-lg text-sm flex items-center">
+          <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
+          Traduction en cours...
         </div>
       )}
     </div>
