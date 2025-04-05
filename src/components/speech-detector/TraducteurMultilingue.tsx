@@ -15,7 +15,7 @@ interface GroqResponse {
   }[];
 }
 
-type SupportedLanguage = "fr" | "ja" | "zh";
+type SupportedLanguage = "fr" | "ja" | "zh" | "en";
 
 const TraducteurVacances: React.FC = () => {
   // États de base
@@ -40,6 +40,11 @@ const TraducteurVacances: React.FC = () => {
     // Détection pour le chinois (caractères chinois)
     const hasChineseChars = /[\u4e00-\u9fff]/.test(text);
     if (hasChineseChars) return "zh";
+    
+    // Détection pour l'anglais (caractères latins et mots anglais courants)
+    const possiblyEnglish = /\b(the|and|is|in|a|to|for|of|on|with|as)\b/i.test(text);
+    if (possiblyEnglish && !/\b(le|la|les|un|une|et|est|dans|pour|sur|avec|comme|ce|cette)\b/i.test(text)) 
+      return "en";
     
     // Par défaut, considérer que c'est du français
     return "fr";
@@ -101,7 +106,9 @@ const TraducteurVacances: React.FC = () => {
       
       // Si on connaît déjà la langue, on peut l'indiquer à Whisper
       if (forcedLanguage) {
-        const langCode = forcedLanguage === "fr" ? "fr" : forcedLanguage === "ja" ? "ja" : "zh";
+        const langCode = forcedLanguage === "fr" ? "fr" : 
+                        forcedLanguage === "ja" ? "ja" : 
+                        forcedLanguage === "zh" ? "zh" : "en";
         formData.append("language", langCode);
       }
       
@@ -135,24 +142,57 @@ const TraducteurVacances: React.FC = () => {
     setTranslations({});
     
     try {
+      let translationsToMake: { target: SupportedLanguage, source: SupportedLanguage }[] = [];
+      
+      // Pour chaque langue source, déterminer les langues cibles
       if (sourceLang === "ja") {
-        // Si source japonaise, traduire en français ET en chinois
-        const [frTranslation, zhTranslation] = await Promise.all([
-          translateText(text, sourceLang, "fr"),
-          translateText(text, sourceLang, "zh")
-        ]);
-        
-        setTranslations({
-          fr: frTranslation || "Erreur de traduction",
-          zh: zhTranslation || "Erreur de traduction"
-        });
+        // Si source japonaise, traduire vers les autres langues
+        translationsToMake = [
+          { target: "fr", source: sourceLang },
+          { target: "zh", source: sourceLang },
+          { target: "en", source: sourceLang }
+        ];
+      } else if (sourceLang === "zh") {
+        translationsToMake = [
+          { target: "fr", source: sourceLang },
+          { target: "ja", source: sourceLang },
+          { target: "en", source: sourceLang }
+        ];
+      } else if (sourceLang === "en") {
+        translationsToMake = [
+          { target: "fr", source: sourceLang },
+          { target: "ja", source: sourceLang },
+          { target: "zh", source: sourceLang }
+        ];
       } else {
-        // Si source française ou chinoise, traduire en japonais
-        const jaTranslation = await translateText(text, sourceLang, "ja");
-        setTranslations({
-          ja: jaTranslation || "Erreur de traduction"
-        });
+        // Si source française, traduire vers les autres langues
+        translationsToMake = [
+          { target: "ja", source: sourceLang },
+          { target: "zh", source: sourceLang },
+          { target: "en", source: sourceLang }
+        ];
       }
+      
+      // Filtrer pour ne pas traduire vers la langue source
+      translationsToMake = translationsToMake.filter(
+        ({ target }) => target !== sourceLang
+      );
+      
+      // Effectuer toutes les traductions en parallèle
+      const newTranslations: {[key: string]: string} = {};
+      
+      await Promise.all(
+        translationsToMake.map(async ({ source, target }) => {
+          const translation = await translateText(text, source, target);
+          if (translation) {
+            newTranslations[target] = translation;
+          } else {
+            newTranslations[target] = "Erreur de traduction";
+          }
+        })
+      );
+      
+      setTranslations(newTranslations);
     } catch (error) {
       console.error("Erreur lors du traitement des traductions:", error);
     } finally {
@@ -169,7 +209,8 @@ const TraducteurVacances: React.FC = () => {
       const languageNames = {
         fr: "français",
         ja: "japonais",
-        zh: "chinois"
+        zh: "chinois",
+        en: "anglais"
       };
       
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -198,22 +239,20 @@ const TraducteurVacances: React.FC = () => {
     }
   };
 
-
-// Ajoutez cette fonction pour gérer l'appui sur les touches dans le textarea
-const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-  // Si la touche Entrée est pressée sans la touche Shift (pour permettre les sauts de ligne avec Shift+Entrée)
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault(); // Empêche le saut de ligne par défaut
-    
-    // Vérifiez que le texte n'est pas vide et qu'aucune traduction n'est en cours
-    if (inputText.trim() && !isTranslating && !isRecording) {
-      const lang = detectLanguage(inputText);
-      setDetectedLanguage(lang);
-      processTranslations(inputText, lang);
+  // Ajoutez cette fonction pour gérer l'appui sur les touches dans le textarea
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    // Si la touche Entrée est pressée sans la touche Shift (pour permettre les sauts de ligne avec Shift+Entrée)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); // Empêche le saut de ligne par défaut
+      
+      // Vérifiez que le texte n'est pas vide et qu'aucune traduction n'est en cours
+      if (inputText.trim() && !isTranslating && !isRecording) {
+        const lang = detectLanguage(inputText);
+        setDetectedLanguage(lang);
+        processTranslations(inputText, lang);
+      }
     }
-  }
-};
-
+  };
 
   // Soumission du formulaire texte
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -238,12 +277,21 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
   const languageDisplay = {
     fr: { name: "Français", flag: "🇫🇷" },
     ja: { name: "Japonais", flag: "🇯🇵" },
-    zh: { name: "Chinois", flag: "🇨🇳" }
+    zh: { name: "Chinois", flag: "🇨🇳" },
+    en: { name: "Anglais", flag: "🇬🇧" }
+  };
+
+  // Messages d'instruction selon la langue
+  const recordingInstructions = {
+    fr: "Allez-y, parlez en français. Cliquez à nouveau sur 🇫🇷 quand vous avez terminé.",
+    ja: "日本語で話してください。終わったら再度 🇯🇵 をクリックしてください。",
+    zh: "请用中文讲话。说完后再次点击 🇨🇳。",
+    en: "Go ahead, speak in English. Click on 🇬🇧 again when you're done."
   };
 
   return (
     <div className="w-full max-w-md mx-auto my-4 p-4 bg-white rounded-lg shadow-lg">
-         {/* Résultats */}
+      {/* Résultats */}
       {Object.keys(translations).length > 0 && (
         <div className="space-y-4 mb-4">
           {Object.entries(translations).map(([lang, text]) => (
@@ -255,7 +303,8 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
               <div className={`p-3 border rounded-lg ${
                 lang === 'ja' ? 'bg-green-50 border-green-200' :
                 lang === 'fr' ? 'bg-blue-50 border-blue-200' : 
-                'bg-purple-50 border-purple-200'
+                lang === 'zh' ? 'bg-purple-50 border-purple-200' :
+                'bg-yellow-50 border-yellow-200'
               }`}>
                 <p className="whitespace-pre-wrap">{text}</p>
               </div>
@@ -264,134 +313,122 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
         </div>
       )}
       
-     
-     
-      {/* <h1 className="text-xl md:text-2xl font-bold text-center mb-4 text-gray-800">
-        Traducteur de Vacances au Japon
-      </h1>
-      
-     
-      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-        <p><strong>Comment ça marche:</strong></p>
-        <ul className="list-disc ml-5 space-y-1 mt-1">
-          <li>Parlez ou écrivez en français ou chinois → traduction en japonais</li>
-          <li>Parlez ou écrivez en japonais → traduction en français ET chinois</li>
-        </ul>
-      </div>
-       */}
       {/* Entrée */}
-      <div className="bottom-0 left-0  w-full fixed z-5">
-      <form onSubmit={handleSubmit} className="mb-4">
-        <div className="mb-3">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Texte à traduire:
-          </label>
-          <textarea
-  value={inputText}
-  onChange={(e) => setInputText(e.target.value)}
-  onKeyDown={handleKeyDown}
-  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-  rows={4}
-  placeholder="Entrez du texte à traduire..."
-  disabled={isTranslating || isRecording}
-/>
+      <div className="bottom-0 left-0 w-full fixed z-5 bg-white border-t border-gray-200 p-2">
+        <form onSubmit={handleSubmit}>
+          <div className="mb-2">
+            <textarea
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              rows={3}
+              placeholder="Entrez du texte à traduire..."
+              disabled={isTranslating || isRecording}
+            />
+            
+            {detectedLanguage && (
+              <div className="mt-1 text-sm text-gray-500">
+                Langue détectée: {languageDisplay[detectedLanguage].flag} {languageDisplay[detectedLanguage].name}
+              </div>
+            )}
+          </div>
           
-          {detectedLanguage && (
-            <div className="mt-1 text-sm text-gray-500">
-              Langue détectée: {languageDisplay[detectedLanguage].flag} {languageDisplay[detectedLanguage].name}
+          {/* Message d'instruction pour l'enregistrement */}
+          {isRecording && recordingLanguage && (
+            <div className="mb-3 fixed w-full top-0 z-7 left-0 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-yellow-800">
+                {recordingInstructions[recordingLanguage]}
+              </p>
             </div>
           )}
-        </div>
+          
+          {/* Boutons d'action */}
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              type="button"
+              onClick={() => startRecording("fr")}
+              disabled={isTranslating || (isRecording && recordingLanguage !== "fr")}
+              className={`flex items-center justify-center py-2 px-2 rounded-lg
+                text-white font-medium text-sm transition-all
+                ${isRecording && recordingLanguage === "fr"
+                  ? "bg-red-500 hover:bg-red-600" 
+                  : "bg-blue-600 hover:bg-blue-700"} 
+                ${(isTranslating || (isRecording && recordingLanguage !== "fr")) ? "opacity-50 cursor-not-allowed" : ""}
+              `}
+            >
+              {isRecording && recordingLanguage === "fr" 
+                ? <><BiMicrophoneOff className="mr-1" /> 🇫🇷</> 
+                : <><FaMicrophone className="mr-1" /> 🇫🇷</>
+              }
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => startRecording("ja")}
+              disabled={isTranslating || (isRecording && recordingLanguage !== "ja")}
+              className={`flex items-center justify-center py-2 px-2 rounded-lg text-white font-medium text-sm transition-all
+                ${isRecording && recordingLanguage === "ja"
+                  ? "bg-red-500 hover:bg-red-600" 
+                  : "bg-green-600 hover:bg-green-700"} 
+                ${(isTranslating || (isRecording && recordingLanguage !== "ja")) ? "opacity-50 cursor-not-allowed" : ""}
+              `}
+            >
+              {isRecording && recordingLanguage === "ja" 
+                ? <><BiMicrophoneOff className="mr-1" /> 🇯🇵</> 
+                : <><FaMicrophone className="mr-1" /> 🇯🇵</>
+              }
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => startRecording("zh")}
+              disabled={isTranslating || (isRecording && recordingLanguage !== "zh")}
+              className={`flex items-center justify-center py-2 px-2 rounded-lg text-white font-medium text-sm transition-all
+                ${isRecording && recordingLanguage === "zh"
+                  ? "bg-red-500 hover:bg-red-600" 
+                  : "bg-purple-600 hover:bg-purple-700"} 
+                ${(isTranslating || (isRecording && recordingLanguage !== "zh")) ? "opacity-50 cursor-not-allowed" : ""}
+              `}
+            >
+              {isRecording && recordingLanguage === "zh" 
+                ? <><BiMicrophoneOff className="mr-1" /> 🇨🇳</> 
+                : <><FaMicrophone className="mr-1" /> 🇨🇳</>
+              }
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => startRecording("en")}
+              disabled={isTranslating || (isRecording && recordingLanguage !== "en")}
+              className={`flex items-center justify-center py-2 px-2 rounded-lg text-white font-medium text-sm transition-all
+                ${isRecording && recordingLanguage === "en"
+                  ? "bg-red-500 hover:bg-red-600" 
+                  : "bg-yellow-600 hover:bg-yellow-700"} 
+                ${(isTranslating || (isRecording && recordingLanguage !== "en")) ? "opacity-50 cursor-not-allowed" : ""}
+              `}
+            >
+              {isRecording && recordingLanguage === "en" 
+                ? <><BiMicrophoneOff className="mr-1" /> 🇬🇧</> 
+                : <><FaMicrophone className="mr-1" /> 🇬🇧</>
+              }
+            </button>
+          </div>
+        </form>
         
-        {/* Boutons d'action */}
-        <div className="grid h-[100px] grid-cols-3 md:grid-cols-4 gap-2 mb-4">
-          <button
-            type="button"
-            onClick={() => startRecording("fr")}
-            disabled={isTranslating || (isRecording && recordingLanguage !== "fr")}
-            className={`flex items-center justify-center py-2 px-2 md:px-3 
-              text-white font-medium text-xl md:text-sm transition-all
-              ${isRecording && recordingLanguage === "fr"
-                ? "bg-red-500 hover:bg-red-600" 
-                : "bg-blue-600 hover:bg-blue-700"} 
-              ${(isTranslating || (isRecording && recordingLanguage !== "fr")) ? "opacity-50 cursor-not-allowed" : ""}
-            `}
-          >
-            {isRecording && recordingLanguage === "fr" 
-              ? <><BiMicrophoneOff className="mr-1" /> 🇫🇷</> 
-              : <><FaMicrophone className="mr-1" /> 🇫🇷</>
-            }
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => startRecording("ja")}
-            disabled={isTranslating || (isRecording && recordingLanguage !== "ja")}
-            className={`flex items-center justify-center py-2 px-2 md:px-3 rounded-lg text-white font-medium text-xl md:text-sm transition-all
-              ${isRecording && recordingLanguage === "ja"
-                ? "bg-red-500 hover:bg-red-600" 
-                : "bg-green-600 hover:bg-green-700"} 
-              ${(isTranslating || (isRecording && recordingLanguage !== "ja")) ? "opacity-50 cursor-not-allowed" : ""}
-            `}
-          >
-            {isRecording && recordingLanguage === "ja" 
-              ? <><BiMicrophoneOff className="mr-1" /> 🇯🇵</> 
-              : <><FaMicrophone className="mr-1" /> 🇯🇵</>
-            }
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => startRecording("zh")}
-            disabled={isTranslating || (isRecording && recordingLanguage !== "zh")}
-            className={`flex items-center justify-center py-2 px-2 md:px-3 rounded-lg text-white font-medium text-xl md:text-sm transition-all
-              ${isRecording && recordingLanguage === "zh"
-                ? "bg-red-500 hover:bg-red-600" 
-                : "bg-purple-600 hover:bg-purple-700"} 
-              ${(isTranslating || (isRecording && recordingLanguage !== "zh")) ? "opacity-50 cursor-not-allowed" : ""}
-            `}
-          >
-            {isRecording && recordingLanguage === "zh" 
-              ? <><BiMicrophoneOff className="mr-1" /> 🇨🇳</> 
-              : <><FaMicrophone className="mr-1" /> 🇨🇳</>
-            }
-          </button>
-          
-          <button
-            type="submit"
-            disabled={!inputText.trim() || isTranslating || isRecording}
-            className={`flex hidden items-center justify-center py-2 px-3 rounded-lg bg-indigo-600 text-white font-medium text-xs md:text-sm transition-all col-span-3 md:col-span-1
-              ${(!inputText.trim() || isTranslating || isRecording) ? "opacity-50 cursor-not-allowed" : "hover:bg-indigo-700"}
-            `}
-          >
-            <MdTranslate className="mr-1" />
-            {isTranslating ? "..." : "Traduire"}
-          </button>
-        </div>
-      </form>
-      
-      {/* Indicateur d'enregistrement */}
-      {isRecording && recordingLanguage && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg flex items-center">
-          <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse mr-2"></div>
-          <p className="text-red-700 text-sm">
-            Enregistrement en cours ({languageDisplay[recordingLanguage].name})...
-          </p>
-        </div>
-      )}
-      
-      {/* Indicateur de traduction */}
-      {isTranslating && (
-        <div className="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg flex items-center">
-          <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse mr-2"></div>
-          <p className="text-blue-700 text-sm">
-            Traduction en cours...
-          </p>
-        </div>
-      )}
+        {/* Indicateur de traduction */}
+        {isTranslating && (
+          <div className="mt-2 p-2 bg-blue-100 border border-blue-300 rounded-lg flex items-center">
+            <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse mr-2"></div>
+            <p className="text-blue-700 text-sm">
+              Traduction en cours...
+            </p>
+          </div>
+        )}
       </div>
+      
       {/* Pied de page */}
-      <div className="text-xs text-center text-gray-500 mt-4">
+      <div className="text-xs text-center text-gray-500 mt-80">
         Parfait pour vos vacances au Japon en famille
       </div>
     </div>
