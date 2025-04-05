@@ -223,6 +223,21 @@ const setLanguageAndContinue = async (language: SupportedLanguage): Promise<void
     alert("Erreur lors de l'enregistrement des préférences. Veuillez réessayer.");
   }
 };
+// Ajoutez cet état pour contrôler l'accordéon du QR code
+const [qrCodeExpanded, setQrCodeExpanded] = useState<boolean>(true);
+
+// Ajoutez cette référence pour le défilement automatique
+const messagesEndRef = useRef<HTMLDivElement>(null);
+
+// Ajoutez cet effet pour faire défiler vers le bas à chaque nouveau message
+useEffect(() => {
+  if (messagesEndRef.current) {
+    messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  }
+}, [messages]);
+
+
+
 
   // Écouter les messages
   // Écouter les messages
@@ -638,27 +653,43 @@ const translateText = async (text: string, sourceLang: SupportedLanguage, target
     );
   }
 
-  // Écran de chat
-  return (
-    <div className="w-full max-w-md mx-auto my-4 p-4 bg-white rounded-lg shadow-lg">
-      <h1 className="text-xl font-bold text-center mb-2">
+ // Écran de chat
+return (
+  <div className="flex flex-col h-screen">
+    {/* En-tête avec le titre et le QR code */}
+    <div className="p-4 bg-white border-b">
+      <h1 className="text-xl font-bold text-center">
         Chat Multilingue {userLanguage && languageFlags[userLanguage]}
       </h1>
       
       {isCreator && (
-        <div className="text-center mb-4">
-          <p className="mb-2">Partagez ce QR code pour inviter quelqu'un:</p>
-          <div className="bg-white p-3 inline-block rounded-lg border">
-            <QRCode
-              value={`${window.location.origin}${window.location.pathname}?session=${sessionId}`}
-              size={150}
-            />
-          </div>
-          <p className="mt-2 text-sm text-gray-600">Session ID: {sessionId}</p>
+        <div className="mt-2">
+          <button 
+            onClick={() => setQrCodeExpanded(!qrCodeExpanded)}
+            className="w-full flex items-center justify-between p-2 bg-gray-100 rounded-lg"
+          >
+            <span>Partagez ce QR code pour inviter quelqu'un</span>
+            <span>{qrCodeExpanded ? '▲' : '▼'}</span>
+          </button>
+          
+          {qrCodeExpanded && (
+            <div className="text-center p-2 mt-2 bg-white border rounded-lg">
+              <div className="bg-white p-3 inline-block">
+                <QRCode
+                  value={`${window.location.origin}${window.location.pathname}?session=${sessionId}`}
+                  size={150}
+                />
+              </div>
+              <p className="mt-2 text-sm text-gray-600">Session ID: {sessionId}</p>
+            </div>
+          )}
         </div>
       )}
-      
-      <div className="h-64 border rounded-lg p-3 mb-4 overflow-y-auto bg-gray-50">
+    </div>
+    
+    {/* Zone de messages qui prend tout l'espace disponible */}
+    <div className="flex-grow overflow-y-auto p-4">
+      <div className="max-w-md mx-auto">
         {messages.length === 0 ? (
           <div className="text-center text-gray-400 mt-20">
             Aucun message. Commencez la conversation!
@@ -708,54 +739,62 @@ const translateText = async (text: string, sourceLang: SupportedLanguage, target
             );
           })
         )}
+        {/* Élément invisible pour le défilement automatique */}
+        <div ref={messagesEndRef} />
       </div>
-      
-      <div className="flex items-center mb-2">
-        <button
-          onClick={startRecording}
-          className={`mr-2 p-2 rounded-full ${
-            isRecording ? "bg-red-500 text-white" : "bg-gray-200"
-          }`}
-          title={isRecording ? "Arrêter l'enregistrement" : "Enregistrer un message vocal"}
-          disabled={isTranslating}
-        >
-          {isRecording ? <BiMicrophoneOff size={20} /> : <FaMicrophone size={20} />}
-        </button>
-        
-        <form onSubmit={sendMessage} className="flex-1 flex">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Tapez votre message ici..."
-            className="flex-1 p-2 border rounded-l-lg"
-            disabled={isRecording || isTranslating}
-          />
-          <button
-            type="submit"
-            className="bg-blue-500 text-white py-2 px-4 rounded-r-lg hover:bg-blue-600"
-            disabled={!message.trim() || isRecording || isTranslating}
-          >
-            Envoyer
-          </button>
-        </form>
-      </div>
-      
-      {isRecording && (
-        <div className="p-2 bg-red-100 text-red-800 rounded-lg text-sm flex items-center">
-          <div className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></div>
-          Enregistrement en cours... Cliquez sur le microphone pour terminer.
-        </div>
-      )}
-      
-      {isTranslating && (
-        <div className="p-2 bg-blue-100 text-blue-800 rounded-lg text-sm flex items-center">
-          <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
-          Traduction en cours...
-        </div>
-      )}
     </div>
-  );
+    
+    {/* Barre de saisie fixée en bas */}
+    <div className="p-4 bg-white border-t">
+      <div className="max-w-md mx-auto">
+        <div className="flex items-center">
+          <button
+            onClick={startRecording}
+            className={`mr-2 p-2 rounded-full ${
+              isRecording ? "bg-red-500 text-white" : "bg-gray-200"
+            }`}
+            title={isRecording ? "Arrêter l'enregistrement" : "Enregistrer un message vocal"}
+            disabled={isTranslating}
+          >
+            {isRecording ? <BiMicrophoneOff size={20} /> : <FaMicrophone size={20} />}
+          </button>
+          
+          <form onSubmit={sendMessage} className="flex-1 flex">
+            <input
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Tapez votre message ici..."
+              className="flex-1 p-2 border rounded-l-lg"
+              disabled={isRecording || isTranslating}
+            />
+            <button
+              type="submit"
+              className="bg-blue-500 text-white py-2 px-4 rounded-r-lg hover:bg-blue-600"
+              disabled={!message.trim() || isRecording || isTranslating}
+            >
+              Envoyer
+            </button>
+          </form>
+        </div>
+        
+        {isRecording && (
+          <div className="mt-2 p-2 bg-red-100 text-red-800 rounded-lg text-sm flex items-center">
+            <div className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></div>
+            Enregistrement en cours... Cliquez sur le microphone pour terminer.
+          </div>
+        )}
+        
+        {isTranslating && (
+          <div className="mt-2 p-2 bg-blue-100 text-blue-800 rounded-lg text-sm flex items-center">
+            <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
+            Traduction en cours...
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
 };
 
 export default SimpleChatApp;
