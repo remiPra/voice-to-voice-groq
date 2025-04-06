@@ -58,6 +58,8 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
 
   const [recordingEnded, setRecordingEnded] = useState(false);
   // Ajoutez ceci avec les autres états
+  // 1. D'abord, ajoutez un state pour suivre si un audio TTS est en cours
+  const [currentTTSAudio, setCurrentTTSAudio] = useState<HTMLAudioElement | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<string>(
     "7d4f1bf2-696f-4f76-ba51-f804324c7cd2"
   ); // Kevin par défaut
@@ -388,17 +390,26 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
     // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
     isTTSAudioPlayingRef.current = true;
+    
+    // Si un audio est déjà en cours, l'arrêter d'abord
+    if (currentTTSAudio) {
+      currentTTSAudio.pause();
+      currentTTSAudio.currentTime = 0;
+      URL.revokeObjectURL(currentTTSAudio.src);
+      setCurrentTTSAudio(null);
+    }
+  
     // On ne met pas encore setIsTTSPlaying(true) ici
-
+  
     // Récupérer la voix actuellement sélectionnée
     const currentSelectedVoice = selectedVoice;
     console.log("Synthèse vocale avec voix ID:", currentSelectedVoice);
-
+  
     // Trouver les informations de la voix sélectionnée
     const selectedVoiceInfo = availableVoices.find(
       (voice) => voice.id === currentSelectedVoice
     );
-
+  
     if (!selectedVoiceInfo) {
       console.error(
         "Erreur: Voix non trouvée dans la liste des voix disponibles"
@@ -406,14 +417,14 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       isTTSAudioPlayingRef.current = false;
       return;
     }
-
+  
     console.log(
       `Utilisation de la voix: ${selectedVoiceInfo.name} (${selectedVoiceInfo.api})`
     );
-
+  
     try {
       let response;
-
+  
       // Appeler l'API appropriée selon le type de voix sélectionné
       if (selectedVoiceInfo.api === "cartesia") {
         // API Cartesia
@@ -460,48 +471,53 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       } else {
         throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
       }
-
+  
       // Vérifier si la réponse est OK
       if (!response.ok) {
         throw new Error(
           `Erreur HTTP: ${response.status} - ${response.statusText}`
         );
       }
-
+  
       // Convertir la réponse en blob audio
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
-
+  
       // Ajouter l'URL à la liste des audios générés
       setAudioUrls((prev) => [...prev, audioUrl]);
-
+  
       // Créer et jouer l'audio
       const audio = new Audio(audioUrl);
       audio.playbackRate = playbackRate;
-
+      
+      // Stocker la référence à l'audio en cours
+      setCurrentTTSAudio(audio);
+  
       // Ajouter un événement onplay qui sera déclenché quand l'audio commence réellement à jouer
       audio.onplay = () => {
         console.log("Lecture audio démarrée - vidéo2 affichée");
         setIsTTSPlaying(true); // Activer vidéo2 quand l'audio commence réellement à jouer
       };
-
+  
       // Configurer le callback de fin de lecture
       audio.onended = () => {
         // Réactiver la détection une fois le TTS terminé
         console.log("Lecture audio terminée - retour à vidéo1");
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false); // Revenir à vidéo1 quand l'audio se termine
+        setCurrentTTSAudio(null);
         URL.revokeObjectURL(audioUrl);
       };
-
+  
       // Gérer les erreurs potentielles lors de la lecture
       audio.onerror = (e) => {
         console.error("Erreur lors de la lecture de l'audio:", e);
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false);
+        setCurrentTTSAudio(null);
         URL.revokeObjectURL(audioUrl);
       };
-
+  
       // Lancer la lecture
       console.log("Démarrage de la lecture audio");
       try {
@@ -510,6 +526,7 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
         console.error("Erreur de démarrage de l'audio:", playError);
         setIsTTSPlaying(false);
         isTTSAudioPlayingRef.current = false;
+        setCurrentTTSAudio(null);
         URL.revokeObjectURL(audioUrl);
       }
     } catch (error) {
@@ -517,8 +534,43 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       // S'assurer que le flag est réinitialisé en cas d'erreur
       isTTSAudioPlayingRef.current = false;
       setIsTTSPlaying(false);
+      setCurrentTTSAudio(null);
     }
   };
+
+
+
+
+  const stopTTS = () => {
+    if (currentTTSAudio) {
+      currentTTSAudio.pause();
+      currentTTSAudio.currentTime = 0;
+      
+      if (currentTTSAudio.src) {
+        URL.revokeObjectURL(currentTTSAudio.src);
+      }
+      
+      setCurrentTTSAudio(null);
+      isTTSAudioPlayingRef.current = false;
+      setIsTTSPlaying(false);
+    }
+  };
+  
+  // 4. Ajoutez une fonction pour tout arrêter (TTS + micro)
+  const stopEverything = () => {
+    // Arrêter le TTS
+    stopTTS();
+    
+    // Arrêter l'écoute du micro
+    stopListening();
+    
+    // Arrêter l'enregistrement manuel si actif
+    if (isManualRecording) {
+      stopRecording();
+      setIsManualRecording(false);
+    }
+  };
+
   const sendAudioForTranscription = async (
     audioBlob: Blob
   ): Promise<TranscriptionResult | null> => {
@@ -576,6 +628,44 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
       setIsTranscribing(false);
       if (transcription && transcription.text) {
         const transcriptionText = transcription.text.trim();
+      
+        //mots clefs pour arreter tout 
+        const stopPhrases = [
+          "merci au revoir", 
+          "arrête tout", 
+          "stop tout", 
+          "au revoir",
+          "stop écoute",
+          "arrête l'écoute",
+          "merci beaucoup au revoir"
+        ];
+        
+        if (stopPhrases.some(phrase => transcriptionText.includes(phrase))) {
+          console.log("🛑 Commande d'arrêt détectée:", transcriptionText);
+          // Ajouter un message dans les transcriptions
+          setTranscriptions(prev => [
+            ...prev,
+            {
+              id: `speech-${Date.now()}`,
+              text: transcriptionText + " (Commande d'arrêt détectée)",
+              timestamp: new Date().toLocaleTimeString(),
+            },
+          ]);
+          
+          // Déclencher l'arrêt complet
+          stopEverything();
+          
+          // Éventuellement, ajouter un message de confirmation
+          await speakResponse("D'accord, à bientôt!");
+          
+          return;
+        }
+      
+      
+      
+      
+      
+      
         if (
           transcriptionText === "..." ||
           transcriptionText === ".." ||
@@ -1097,6 +1187,24 @@ const SpeechDetectorNoInterrupt: React.FC<SpeechDetectorProps> = ({
                 </span>
               </div>
               <div className="flex space-x-2">
+
+              {(isTTSPlaying || isListening || isManualRecording) && (
+    <button
+      onClick={stopEverything}
+      className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 bg-[#e63946] text-white shadow-lg"
+    >
+      <span className="mr-1">⏹</span> Stop All
+    </button>
+  )}
+  {isTTSPlaying && (
+  <button
+    onClick={stopTTS}
+    className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 bg-[#ff9000] text-white shadow-lg"
+  >
+    <span className="mr-1">⏹</span> Stop TTS
+  </button>
+)}
+
                 <button
                   onClick={toggleManualRecording}
                   className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${

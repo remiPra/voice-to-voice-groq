@@ -656,6 +656,43 @@ const DetectionFinal: React.FC<SpeechDetectorProps> = ({
       return null;
     }
   };
+  const [currentTTSAudio, setCurrentTTSAudio] = useState<HTMLAudioElement | null>(null);
+
+
+
+  const stopTTS = () => {
+    if (currentTTSAudio) {
+      currentTTSAudio.pause();
+      currentTTSAudio.currentTime = 0;
+      
+      if (currentTTSAudio.src) {
+        URL.revokeObjectURL(currentTTSAudio.src);
+      }
+      
+      setCurrentTTSAudio(null);
+      isTTSAudioPlayingRef.current = false;
+      setIsTTSPlaying(false);
+    }
+  };
+
+
+
+  const stopEverything = () => {
+    // Arrêter le TTS
+    stopTTS();
+    
+    // Arrêter l'écoute du micro
+    stopListening();
+    
+    // Arrêter l'enregistrement manuel si actif
+    if (isManualRecording) {
+      stopRecording();
+      setIsManualRecording(false);
+    }
+  };
+
+
+
 
   const saveRecording = async (audioBlob: Blob) => {
     const url = URL.createObjectURL(audioBlob);
@@ -673,6 +710,43 @@ const DetectionFinal: React.FC<SpeechDetectorProps> = ({
       setIsTranscribing(false);
       if (transcription && transcription.text) {
         const transcriptionText = transcription.text.trim();
+        
+        
+        //mots clefs pour arreter tout 
+        const stopPhrases = [
+          "merci au revoir", 
+          "arrête tout", 
+          "stop tout", 
+          "au revoir",
+          "stop écoute",
+          "arrête l'écoute",
+          "merci beaucoup au revoir"
+        ];
+        
+        if (stopPhrases.some(phrase => transcriptionText.includes(phrase))) {
+          console.log("🛑 Commande d'arrêt détectée:", transcriptionText);
+          // Ajouter un message dans les transcriptions
+          setTranscriptions(prev => [
+            ...prev,
+            {
+              id: `speech-${Date.now()}`,
+              text: transcriptionText + " (Commande d'arrêt détectée)",
+              timestamp: new Date().toLocaleTimeString(),
+            },
+          ]);
+          
+          // Déclencher l'arrêt complet
+          stopEverything();
+          
+          // Éventuellement, ajouter un message de confirmation
+          await speakResponse("D'accord, à bientôt!");
+          
+          return;
+        }
+      
+        
+        
+        
         if (
           transcriptionText === "..." ||
           transcriptionText === ".." ||
