@@ -121,6 +121,13 @@ const Navbar = () => {
               final2
             </Link>
             <Link
+              to="/final3"
+              onClick={() => setDrawerOpen(false)}
+              className="hover:text-gray-300"
+            >
+              final3
+            </Link>
+            <Link
               to="/epitact"
               onClick={() => setDrawerOpen(false)}
               className="hover:text-gray-300"
