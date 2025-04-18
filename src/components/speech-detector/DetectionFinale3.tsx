@@ -1314,7 +1314,7 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
                 {isTTSPlaying ? (
                   <video
                     key="speaking-video"
-                    src="/image_26_ins--video2.mp4"
+                    src="/video2.mp4"
                     className="w-full h-full object-cover"
                     autoPlay
                     loop
@@ -1324,7 +1324,7 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
                 ) : (
                   <video
                     key="idle-video"
-                    src="/image_26_ins--video1.mp4"
+                    src="/video1.mp4"
                     className="w-full h-full object-cover"
                     autoPlay
                     loop
@@ -1370,7 +1370,7 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
             </div>
           </form>
 
-          <div className="bg-[#0a2463] p-4 shadow-inner">
+          {/* <div className="bg-[#0a2463] p-4 shadow-inner">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-3">
                 <div
@@ -1431,11 +1431,11 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
                 style={{ width: `${Math.min(volume * 200, 100)}%` }}
               ></div>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="fixed top-0 right-0 h-full">
-          <button
+          {/* <button
             className="fixed right-12 z-50 top-1/2 transform -translate-y-1/2 bg-[#0a2463] text-white p-3 rounded-l-lg shadow-lg hover:bg-[#1e3a8a] transition-all duration-300"
             onClick={() => {
               const panel = document.getElementById("techPanel");
@@ -1465,15 +1465,46 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
-          </button>
+          </button> */}
           <div
             id="techPanel"
             className="w-full md:w-96 h-full bg-white border-l border-gray-200 shadow-2xl overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
           >
-            <div className="p-5 bg-[#0a2463] text-white">
+            <div className="flex justify-around items-center p-5 bg-[#0a2463] text-white">
               <h2 className="text-lg font-bold font-['Montserrat',sans-serif]">
                 Panneau Technique
               </h2>
+              <button
+            className="bg-[#0a2463] text-white p-3 rounded-l-lg shadow-lg hover:bg-[#1e3a8a] transition-all duration-300"
+            onClick={() => {
+              const panel = document.getElementById("techPanel");
+              if (panel) {
+                panel.classList.toggle("translate-x-full");
+                panel.classList.toggle("translate-x-0");
+              }
+            }}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+          </button>
             </div>
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
