@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Convertisseur d'empreinte 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #upload { position: absolute; top: 10px; left: 10px; }
+        #info { 
+            position: absolute; 
+            top: 10px; 
+            right: 10px; 
+            background: rgba(0,0,0,0.7); 
+            color: white; 
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="upload" accept="image/*">
+    <div id="info">
+        Contrôles:<br>
+        - Clic gauche + glisser: Rotation<br>
+        - Clic droit + glisser: Déplacement<br>
+        - Molette: Zoom<br>
+        - Double-clic: Recentrer
+    </div>
+    <script>
+        let scene, camera, renderer, controls, mesh;
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 10);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            // Configuration des contrôles avec zoom amélioré
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Mouvement plus fluide
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 2;  // Distance minimale pour le zoom in
+            controls.maxDistance = 50; // Distance maximale pour le zoom out
+            controls.maxPolarAngle = Math.PI; // Permet une rotation complète
+            
+            // Ajout de lumières pour un meilleur rendu
+            const ambientLight = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // Grille de référence
+            const gridHelper = new THREE.GridHelper(20, 20);
+            scene.add(gridHelper);
+            
+            // Redimensionnement auto
+            window.addEventListener('resize', onWindowResize, false);
+            
+            // Double-clic pour recentrer
+            renderer.domElement.addEventListener('dblclick', function() {
+                controls.reset();
+            });
+            
+            animate();
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Nécessaire pour le damping
+            renderer.render(scene, camera);
+        }
+        
+        function processImage(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Redimensionner pour la performance
+            const scale = 0.25;
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Supprimer l'ancien mesh s'il existe
+            if (mesh) {
+                scene.remove(mesh);
+            }
+            
+            // Créer la géométrie
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const indices = [];
+            const colors = [];
+            
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const i = (y * canvas.width + x) * 4;
+                    const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+                    const height = (255 - brightness) / 255 * 2; // Hauteur de 0 à 2
+                    
+                    vertices.push(x / canvas.width * 10 - 5);
+                    vertices.push(y / canvas.height * 10 - 5);
+                    vertices.push(height);
+                    
+                    // Ajouter des couleurs basées sur la hauteur
+                    const color = new THREE.Color();
+                    color.setHSL(0.6 - height/3, 0.7, 0.5);
+                    colors.push(color.r, color.g, color.b);
+                }
+            }
+            
+            // Créer les triangles
+            for (let y = 0; y < canvas.height - 1; y++) {
+                for (let x = 0; x < canvas.width - 1; x++) {
+                    const i = y * canvas.width + x;
+                    indices.push(i, i + canvas.width, i + 1);
+                    indices.push(i + 1, i + canvas.width, i + canvas.width + 1);
+                }
+            }
+            
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
+            
+            const material = new THREE.MeshPhongMaterial({ 
+                vertexColors: true,
+                side: THREE.DoubleSide,
+                flatShading: false
+            });
+            
+            mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            
+            // Ajuster la caméra pour voir le modèle en entier
+            const box = new THREE.Box3().setFromObject(mesh);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+            cameraZ *= 1.5; // Facteur de zoom pour voir l'objet entier
+            
+            camera.position.set(center.x, center.y, center.z + cameraZ);
+            controls.target.copy(center);
+            controls.update();
+        }
+        
+        document.getElementById('upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const img = new Image();
+                img.onload = function() {
+                    processImage(img);
+                };
+                img.src = URL.createObjectURL(file);
+            }
+        });
+        
+        init();
+    </script>
+</body>
+</html>

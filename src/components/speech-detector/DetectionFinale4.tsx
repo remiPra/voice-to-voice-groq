@@ -36,11 +36,11 @@ interface GroqResponse {
   }[];
 }
 
-interface TranscriptionResult {
+interface TranscriptionResult { 
   text: string;
 }
 
-const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
+const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
   onSpeechStart,
   onSpeechEnd,
   onVolumeChange,
@@ -67,7 +67,7 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
     useState<boolean>(false);
   const [interruptionCount, setInterruptionCount] = useState<number>(0);
 
-  const [selectedVoice, setSelectedVoice] = useState<string>("8600d5ec-d29c-44fe-8457-7d730dbe8323"); // Kevin par dÃ©faut
+  const [selectedVoice, setSelectedVoice] = useState<string>("0b1380da-611b-4d00-83f4-8a969a53e4e0"); // Kevin par dÃ©faut
   const [transcriptions, setTranscriptions] = useState<
     { id: string; text: string; timestamp: string }[]
   >([]);
@@ -113,7 +113,7 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
   const interruptionTimeoutRef = useRef<number | null>(null);
   const interruptionThreshold = 200; // DurÃ©e minimale pour dÃ©tecter une interruption (ms)
 
-  const [playbackRate, setPlaybackRate] = useState<number>(0.80);
+  const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const isTTSAudioPlayingRef = useRef<boolean>(false);
   const availableVoices = [
     {
@@ -1743,4 +1743,4 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
   );
 };
 
-export default DetectionFinal3;
+export default DetectionFinal4;

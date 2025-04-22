@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appel API Zyphra/Zonos avec Queue</title>
+</head>
+<body>
+    <h1>Test API Zyphra/Zonos</h1>
+    <button onclick="callAPI()">Lancer l'appel API</button>
+    <div id="status"></div>
+    <div id="result"></div>
+    <audio id="audio-player" controls style="display: none; margin-top: 20px;"></audio>
+
+    <script>
+        async function callAPI() {
+            const statusDiv = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            const audioPlayer = document.getElementById('audio-player');
+            
+            statusDiv.innerText = 'Appel en cours...';
+            resultDiv.innerText = '';
+            audioPlayer.style.display = 'none';
+            
+            // Générer un hash de session unique
+            const sessionHash = Math.random().toString(36).substring(2, 15);
+            
+            const data = {
+                data: [
+                    "Zyphra/Zonos-v0.1-transformer",
+                    "Si tu entends toujours une certaine voix, elle n'est pas intérieure. 'Voix intérieure' est une appellation erronée, ce n'est pas le bon mot. Seul le silence est intérieur. Toutes les voix viennent de l'extérieur.",
+                    "fr-fr",
+                    null,
+                    {},
+                    1,
+                    0.05,
+                    0.05,
+                    0.05,
+                    0.74,
+                    0.05,
+                    0.1,
+                    0.2,
+                    0.78,
+                    24000,
+                    45,
+                    15,
+                    4,
+                    false,
+                    2,
+                    0.15,
+                    2812129684,
+                    true,
+                    ["emotion"]
+                ],
+                event_data: null,
+                fn_index: 2,
+                trigger_id: 12,
+                session_hash: sessionHash
+            };
+            
+            try {
+                // 1. Envoyer la requête initiale
+                await fetch('https://steveeeeeeen-zonos.hf.space/gradio_api/queue/join?', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                statusDiv.innerText = 'Requête envoyée, attente des données...';
+                
+                // 2. Écouter les événements Server-Sent Events (SSE)
+                const eventSource = new EventSource(`https://steveeeeeeen-zonos.hf.space/gradio_api/queue/data?session_hash=${sessionHash}`);
+                
+                eventSource.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    
+                    statusDiv.innerText = 'Traitement : ' + (data.msg || 'en cours...');
+                    
+                    if (data.msg === 'process_starts') {
+                        resultDiv.innerText = 'Traitement commencé...';
+                    } else if (data.msg === 'process_completed') {
+                        statusDiv.innerText = 'Traitement terminé !';
+                        
+                        // Si un fichier audio est généré, l'afficher
+                        if (data.output && data.output.data && data.output.data[0]) {
+                            resultDiv.innerText = 'Audio généré :';
+                            if (typeof data.output.data[0] === 'object') {
+                                // Si c'est un objet contenant une URL
+                                if (data.output.data[0].name || data.output.data[0].data) {
+                                    const audioUrl = data.output.data[0].name ? 
+                                        `https://steveeeeeeen-zonos.hf.space/file=${data.output.data[0].name}` : 
+                                        data.output.data[0].data;
+                                    audioPlayer.src = audioUrl;
+                                    audioPlayer.style.display = 'block';
+                                }
+                            } else if (typeof data.output.data[0] === 'string') {
+                                // Si c'est directement une URL ou des données base64
+                                audioPlayer.src = data.output.data[0];
+                                audioPlayer.style.display = 'block';
+                            }
+                        }
+                        
+                        eventSource.close();
+                    }
+                };
+                
+                eventSource.onerror = function(error) {
+                    console.error("Erreur EventSource:", error);
+                    statusDiv.innerText = 'Erreur de connexion SSE';
+                    eventSource.close();
+                };
+                
+            } catch (error) {
+                statusDiv.innerText = 'Erreur : ' + error.message;
+                console.error('Erreur détaillée:', error);
+            }
+        }
+    </script>
+</body>
+</html>
