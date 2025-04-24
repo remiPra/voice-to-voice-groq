@@ -28,15 +28,9 @@ interface Message {
   timestamp?: string;
 }
 
-interface GroqResponse {
-  choices: {
-    message: {
-      content: string;
-    };
-  }[];
-}
 
-interface TranscriptionResult { 
+
+interface TranscriptionResult {
   text: string;
 }
 
@@ -67,13 +61,33 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
     useState<boolean>(false);
   const [interruptionCount, setInterruptionCount] = useState<number>(0);
 
-  const [selectedVoice, setSelectedVoice] = useState<string>("0b1380da-611b-4d00-83f4-8a969a53e4e0"); // Kevin par dÃ©faut
+  const [selectedVoice, setSelectedVoice] = useState<string>("nathalie"); // Kevin par dÃ©faut
   const [transcriptions, setTranscriptions] = useState<
     { id: string; text: string; timestamp: string }[]
   >([]);
+  const SYSTEM_PROMPT = `Tu es un assistant conversationnel spécialisé dans l'analyse et la compréhension de textes. Ton objectif est d'aider l'utilisateur à comprendre l'essence des textes qu'il te partage.
+
+  Adopte un ton naturel et conversationnel, comme si vous discutiez ensemble autour d'un café. Utilise un langage clair, simple et accessible. Évite tout formatage spécial comme les astérisques, le markdown ou autres balises qui nuiraient à la synthèse vocale.
+  
+  Lorsque l'utilisateur te partage un texte:
+  - Aide-le à identifier les idées principales et les thèmes centraux
+  - Explique les concepts complexes avec des mots simples
+  - Propose différentes interprétations possibles quand c'est pertinent
+  - Réponds aux questions spécifiques sur le contenu
+  - Fais des liens avec d'autres connaissances quand c'est utile
+  
+  Reste toujours dans un dialogue naturel, en posant occasionnellement des questions pour mieux comprendre ce que l'utilisateur cherche à apprendre ou comprendre.
+  
+  Tes réponses doivent être concises (généralement entre 2 et 4 phrases) pour favoriser l'échange, sauf si l'utilisateur demande spécifiquement plus de détails.`;
   //@ts-ignore
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "system",
+      content: SYSTEM_PROMPT,
+      timestamp: new Date().toLocaleTimeString(),
+    },
+  ]);
   const [error, setError] = useState<string>("");
   const [threshold, setThreshold] = useState<number>(silenceThreshold);
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
@@ -112,7 +126,7 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
   const lastSpeechTimeRef = useRef<number | null>(null);
   const interruptionTimeoutRef = useRef<number | null>(null);
   const interruptionThreshold = 200; // DurÃ©e minimale pour dÃ©tecter une interruption (ms)
-
+  const MAX_MANUAL_RECORDING_DURATION = 20 * 1000; // 30 secondes
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const isTTSAudioPlayingRef = useRef<boolean>(false);
   const availableVoices = [
@@ -153,6 +167,17 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
       voiceId: "fr-FR-DeniseNeural",
     },
   ];
+  const manualRecordingTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    messageHistory.current = [
+      {
+        role: "system",
+        content: SYSTEM_PROMPT,
+      },
+    ];
+    // eslint-disable-next-line
+  }, []);
   // Ajoutez cet useEffect dans votre composant
   useEffect(() => {
     // Cette fonction s'exÃ©cute chaque fois que interruptionDetected change
@@ -381,6 +406,10 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
 
   const toggleManualRecording = () => {
     if (isManualRecording) {
+      if (manualRecordingTimeoutRef.current) {
+        clearTimeout(manualRecordingTimeoutRef.current);
+        manualRecordingTimeoutRef.current = null;
+      }
       stopRecording();
       setIsManualRecording(false);
     } else {
@@ -412,6 +441,14 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
     if (hasActiveStream) {
       startRecording();
       setIsManualRecording(true);
+      // Démarre le timer de limite de temps
+manualRecordingTimeoutRef.current = window.setTimeout(() => {
+  stopRecording();
+  setIsManualRecording(false);
+  // Optionnel : notification à l’utilisateur
+  setEndNotification(true);
+  setTimeout(() => setEndNotification(false), 2000);
+}, MAX_MANUAL_RECORDING_DURATION);
     } else {
       // Toujours obtenir un nouveau flux si le flux actuel n'existe pas ou est inactif
       navigator.mediaDevices
@@ -496,40 +533,41 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
       ];
       setMessages((prev) => [...prev, userMessage]);
       setError("");
-
+  
       // Son d'attente
       const waitingAudio = new Audio("/no_input.mp3");
       waitingAudio.loop = true;
       waitingAudio.volume = 0.3;
       waitingAudio.play();
-
-      const response = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: messageHistory.current,
-            model: "gemma2-9b-it",
-          }),
-        }
-      );
+  
+      // Utiliser DeepSeek au lieu de Groq
+      const response = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_API_KEY_DEEPSEEK}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: messageHistory.current,
+          stream: false,
+        }),
+      });
+      
       waitingAudio.pause();
       waitingAudio.currentTime = 0;
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error?.message || "Erreur API");
       }
-      const data: GroqResponse = await response.json();
+      
+      const data = await response.json();
       if (data.choices?.[0]?.message?.content) {
         const assistantContent = cleanLLMResponse(
           data.choices[0].message.content
         );
-
+  
         const assistantMessage: Message = {
           role: "assistant",
           content: assistantContent,
@@ -908,6 +946,10 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
   };
 
   const stopRecording = () => {
+    if (manualRecordingTimeoutRef.current) {
+      clearTimeout(manualRecordingTimeoutRef.current);
+      manualRecordingTimeoutRef.current = null;
+    }
     if (
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state !== "inactive"
@@ -1311,6 +1353,7 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
           ) : (
             <div className="flex-grow relative overflow-hidden">
               <div className="absolute lg:max-w-[450px] inset-0 w-full h-full">
+                <div className="relative w-full h-full">
                 {isTTSPlaying ? (
                   <video
                     key="speaking-video"
@@ -1332,6 +1375,30 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
                     playsInline
                   />
                 )}
+                <div className="absolute bottom-2 w-full flex justify-center" >
+                <button
+                  onClick={toggleManualRecording}
+                  className={`px-5 w-20 h-20 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                    isManualRecording
+                      ? "bg-[#e63946]  text-white shadow-lg"
+                      : "bg-[#ff9000]  text-white shadow-lg"
+                  }`}
+                >
+                  {isManualRecording ? "â– " : "â— "}
+                </button>
+                <button
+                  onClick={toggleListening}
+                  className={`px-5 py-2.5 w-20 h-20 ml-5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                    isListening
+                      ? "bg-[#e63946] text-white shadow-lg"
+                      : "bg-[#3d9970] text-white shadow-lg"
+                  }`}
+                >
+                  {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
+                </button>
+                </div>
+                </div>
+                
               </div>
             </div>
           )}

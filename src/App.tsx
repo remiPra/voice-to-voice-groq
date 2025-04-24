@@ -15,6 +15,7 @@ import TraducteurVacances from "./components/speech-detector/TraducteurMultiling
 import SimpleChatApp from "./components/TranslateWithQrCode";
 import DetectionFinal2 from "./components/speech-detector/DetectionFinal2";
 import DetectionFinal3 from "./components/speech-detector/DetectionFinale3";
+import DetectionFinal4 from "./components/speech-detector/DetectionFinale4";
 
 
 function App() {
@@ -28,7 +29,7 @@ function App() {
         <Route path="/final" element={<DetectionFinal />} />
         <Route path="/final2" element={<DetectionFinal2 />} />
         <Route path="/final3" element={<DetectionFinal3 />} />
-        
+        <Route path="/final4" element={<DetectionFinal4 />} />
         <Route path="/chinois" element={<TraducteurVacances/>} />
         <Route path="/planches" element={<PlankExerciseApp />} />
         <Route path="/vacances" element={<SimpleChatApp/>} />
