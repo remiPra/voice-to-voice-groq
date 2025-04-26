@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Convertisseur Empreinte 3D - Semelle Orthopédique Thermoformée</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+        canvas { display: block; }
+        .controls-container {
+            position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.85);
+            padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1; font-size: 13px; width: 260px;
+        }
+        h2 { margin-top: 0; color: #333; font-size: 18px; margin-bottom: 15px; }
+        .controls-container div { margin-bottom: 10px; }
+        .controls-container label { display: inline-block; width: 150px; }
+        .controls-container input[type="number"] {
+            width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;
+        }
+        .controls-container select {
+            padding: 4px; border: 1px solid #ccc; border-radius: 4px;
+        }
+        .controls-container button {
+            width: 100%; padding: 8px 15px; margin-top: 15px; background-color: #007bff; color: white;
+            border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;
+            font-weight: bold;
+        }
+        .controls-container button:hover { background-color: #0056b3; }
+        .export-btn { background-color: #28a745 !important; }
+        .export-btn:hover { background-color: #218838 !important; }
+        .controls-container input[type="file"] { margin-bottom: 15px; }
+        .section-title {
+            font-weight: bold; margin-top: 15px; margin-bottom: 10px; color: #555;
+            border-bottom: 1px solid #ddd; padding-bottom: 5px;
+        }
+        hr { margin: 15px 0; border: 0; border-top: 1px solid #eee; }
+        #info {
+            position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.75); color: white;
+            padding: 12px; border-radius: 5px; z-index: 1; font-size: 12px; line-height: 1.4;
+        }
+        .status { font-size: 12px; color: #666; margin-top: 10px; font-style: italic; }
+        .checkbox-group { display: flex; align-items: center; }
+        .checkbox-group input[type="checkbox"] { margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <div class="controls-container">
+        <h2>Semelle Orthopédique Thermoformée</h2>
+        
+        <div>
+            <label for="upload">Charger empreinte:</label>
+            <input type="file" id="upload" accept="image/*">
+        </div>
+        
+        <div class="section-title">Dimensions</div>
+        <div>
+            <label for="realWidth">Largeur réelle (cm):</label>
+            <input type="number" id="realWidth" value="15" step="0.5" min="5" max="40">
+        </div>
+        <div>
+            <label for="maxHeight">Hauteur max (cm):</label>
+            <input type="number" id="maxHeight" value="1.5" step="0.1" min="0.1" max="5">
+        </div>
+        <div>
+            <label for="threshold">Seuil détection:</label>
+            <input type="range" id="threshold" min="0" max="200" value="20" style="width: 120px">
+            <span id="thresholdValue">20</span>
+        </div>
+        
+        <div class="section-title">Semelle</div>
+        <div>
+            <label for="thermoThickness">Épaisseur thermo (mm):</label>
+            <input type="number" id="thermoThickness" value="2.0" step="0.1" min="0.5" max="10">
+        </div>
+        <div>
+            <label for="baseThickness">Épaisseur base (mm):</label>
+            <input type="number" id="baseThickness" value="1.0" step="0.1" min="0.5" max="5">
+        </div>
+        <div>
+            <label for="thermoColor">Couleur thermo:</label>
+            <select id="thermoColor">
+                <option value="blue">Bleu</option>
+                <option value="red">Rouge</option>
+                <option value="green">Vert</option>
+                <option value="gray" selected>Gris</option>
+                <option value="black">Noir</option>
+            </select>
+        </div>
+        
+        <div class="section-title">Visualisation</div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="showEmpreinte" checked>
+            <label for="showEmpreinte">Empreinte (dessus)</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="showThermo" checked>
+            <label for="showThermo">Thermoplastique</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="showBase" checked>
+            <label for="showBase">Base (dessous)</label>
+        </div>
+        <div>
+            <label for="transparency">Transparence:</label>
+            <input type="range" id="transparency" min="0" max="100" value="30" style="width: 120px">
+            <span id="transparencyValue">30%</span>
+        </div>
+        
+        <button id="generateModel">Générer Modèle 3D</button>
+        <button id="exportSTL" class="export-btn">Exporter STL</button>
+        
+        <div class="status" id="status">Chargez une image d'empreinte.</div>
+    </div>
+
+    <div id="info">
+        Semelle Orthopédique Thermoformée<br>
+        Unités: 1 carré = 1 cm<br>
+        Contrôles:<br>
+        - Clic gauche + glisser: Rotation<br>
+        - Clic droit + glisser: Déplacement<br>
+        - Molette: Zoom<br>
+        - Double-clic: Recentrer
+    </div>
+
+    <script>
+        // --- Paramètres de Calibration ---
+        let IMAGE_REAL_WIDTH_CM = 15;     // Largeur réelle de l'image
+        let MAX_HEIGHT_CM = 1.5;          // Relief maximum
+        let BASE_THICKNESS_MM = 1.0;      // Épaisseur de la base
+        let THERMO_THICKNESS_MM = 2.0;    // Épaisseur de la couche thermoplastique
+        let THERMO_COLOR = 0x7a7a7a;      // Couleur gris par défaut
+        let PRESSURE_THRESHOLD = 20;      // Seuil pour l'empreinte (0-255)
+        let TRANSPARENCY = 0.3;           // Niveau de transparence (0-1)
+
+        // --- Variables Globales Three.js ---
+        let scene, camera, renderer, controls;
+        let meshGroup = new THREE.Group();
+        let gridHelper;
+        let currentImg = null;
+        let statusElement;
+        
+        // Référence aux maillages pour visibilité/transparence
+        let meshTop, meshThermo, meshBase, meshEdges = [];
+
+        function init() {
+            // Initialiser l'élément de statut
+            statusElement = document.getElementById('status');
+            
+            // Créer la scène 3D
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xe0e0e0);
+
+            // Configuration de la caméra
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, -IMAGE_REAL_WIDTH_CM * 1.2, IMAGE_REAL_WIDTH_CM * 0.8);
+            camera.lookAt(0, 0, 0);
+
+            // Configuration du renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            // Configuration des contrôles
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.1;
+            controls.screenSpacePanning = true;
+            controls.minDistance = 5;
+            controls.maxDistance = 100;
+            controls.maxPolarAngle = Math.PI; // Permet de regarder par dessous
+
+            // Éclairage
+            const ambientLight = new THREE.AmbientLight(0x606060, 1.5);
+            scene.add(ambientLight);
+            
+            const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            keyLight.position.set(-50, -50, 100);
+            scene.add(keyLight);
+            
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            fillLight.position.set(50, -30, 50);
+            scene.add(fillLight);
+
+            // Grille (1 unité = 1 cm)
+            gridHelper = new THREE.GridHelper(50, 50, 0x888888, 0xcccccc);
+            scene.add(gridHelper);
+
+            // Groupe pour tous les maillages
+            scene.add(meshGroup);
+
+            // Écouter les événements
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('dblclick', () => controls.reset());
+            
+            document.getElementById('upload').addEventListener('change', handleImageUpload);
+            document.getElementById('generateModel').addEventListener('click', handleGenerateModel);
+            document.getElementById('exportSTL').addEventListener('click', exportSTL);
+            document.getElementById('thermoColor').addEventListener('change', updateThermoColor);
+            document.getElementById('threshold').addEventListener('input', updateThresholdDisplay);
+            document.getElementById('transparency').addEventListener('input', updateTransparencyDisplay);
+            
+            // Visibilité des couches
+            document.getElementById('showEmpreinte').addEventListener('change', updateVisibility);
+            document.getElementById('showThermo').addEventListener('change', updateVisibility);
+            document.getElementById('showBase').addEventListener('change', updateVisibility);
+
+            // Initialiser les valeurs des inputs
+            document.getElementById('realWidth').value = IMAGE_REAL_WIDTH_CM;
+            document.getElementById('maxHeight').value = MAX_HEIGHT_CM;
+            document.getElementById('baseThickness').value = BASE_THICKNESS_MM;
+            document.getElementById('thermoThickness').value = THERMO_THICKNESS_MM;
+            document.getElementById('threshold').value = PRESSURE_THRESHOLD;
+            document.getElementById('thresholdValue').textContent = PRESSURE_THRESHOLD;
+            document.getElementById('transparency').value = TRANSPARENCY * 100;
+            document.getElementById('transparencyValue').textContent = (TRANSPARENCY * 100) + "%";
+
+            // Démarrer la boucle d'animation
+            animate();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function updateThresholdDisplay() {
+            const value = parseInt(document.getElementById('threshold').value);
+            document.getElementById('thresholdValue').textContent = value;
+            PRESSURE_THRESHOLD = value;
+        }
+
+        function updateTransparencyDisplay() {
+            const value = parseInt(document.getElementById('transparency').value);
+            document.getElementById('transparencyValue').textContent = value + "%";
+            TRANSPARENCY = value / 100;
+            updateTransparency();
+        }
+
+        function updateThermoColor() {
+            const colorSelect = document.getElementById('thermoColor').value;
+            switch(colorSelect) {
+                case 'blue': THERMO_COLOR = 0x4285f4; break;
+                case 'red': THERMO_COLOR = 0xea4335; break;
+                case 'green': THERMO_COLOR = 0x34a853; break;
+                case 'black': THERMO_COLOR = 0x222222; break;
+                case 'gray': default: THERMO_COLOR = 0x7a7a7a; break;
+            }
+            
+            if (meshThermo) {
+                meshThermo.material.color.set(THERMO_COLOR);
+            }
+            
+            // Mettre à jour la couleur des bords
+            meshEdges.forEach(edge => {
+                if (edge.userData.type === 'thermo') {
+                    edge.material.color.set(THERMO_COLOR);
+                }
+            });
+        }
+
+        function updateVisibility() {
+            if (meshTop) meshTop.visible = document.getElementById('showEmpreinte').checked;
+            if (meshThermo) meshThermo.visible = document.getElementById('showThermo').checked;
+            if (meshBase) meshBase.visible = document.getElementById('showBase').checked;
+            
+            // Mettre à jour les bords également
+            meshEdges.forEach(edge => {
+                if (edge.userData.type === 'thermo') {
+                    edge.visible = document.getElementById('showThermo').checked;
+                } else if (edge.userData.type === 'base') {
+                    edge.visible = document.getElementById('showBase').checked;
+                }
+            });
+        }
+
+        function updateTransparency() {
+            if (meshThermo) {
+                meshThermo.material.opacity = Math.max(0.4, 1 - TRANSPARENCY);
+            }
+            
+            if (meshBase) {
+                meshBase.material.opacity = Math.max(0.3, 1 - TRANSPARENCY);
+            }
+            
+            // Mettre à jour la transparence des bords
+            meshEdges.forEach(edge => {
+                edge.material.opacity = Math.max(0.5, 1 - TRANSPARENCY);
+            });
+        }
+
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                statusElement.textContent = "Chargement de l'image...";
+                
+                const img = new Image();
+                img.onload = function() {
+                    currentImg = img;
+                    statusElement.textContent = "Image chargée. Cliquez sur 'Générer Modèle 3D'.";
+                };
+                img.onerror = function() {
+                    alert("Erreur lors du chargement de l'image.");
+                    currentImg = null;
+                    statusElement.textContent = "Erreur de chargement. Essayez une autre image.";
+                }
+                img.src = URL.createObjectURL(file);
+            }
+        }
+
+        function handleGenerateModel() {
+            if (!currentImg) {
+                alert("Veuillez d'abord charger une image d'empreinte.");
+                return;
+            }
+            
+            // Lire tous les paramètres depuis l'interface
+            IMAGE_REAL_WIDTH_CM = parseFloat(document.getElementById('realWidth').value) || 15;
+            MAX_HEIGHT_CM = parseFloat(document.getElementById('maxHeight').value) || 1.5;
+            BASE_THICKNESS_MM = parseFloat(document.getElementById('baseThickness').value) || 1.0;
+            THERMO_THICKNESS_MM = parseFloat(document.getElementById('thermoThickness').value) || 2.0;
+            PRESSURE_THRESHOLD = parseInt(document.getElementById('threshold').value);
+            
+            statusElement.textContent = "Génération du modèle en cours...";
+            
+            // Utiliser setTimeout pour permettre la mise à jour du DOM avant traitement
+            setTimeout(() => {
+                processImage(currentImg);
+            }, 50);
+        }
+
+        function processImage(img) {
+            console.log(`Traitement avec: Largeur=${IMAGE_REAL_WIDTH_CM}cm, MaxZ=${MAX_HEIGHT_CM}cm, Base=${BASE_THICKNESS_MM}mm, Thermo=${THERMO_THICKNESS_MM}mm, Seuil=${PRESSURE_THRESHOLD}`);
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Limiter la résolution de la géométrie pour les performances
+            const maxGeometryResolution = 256; // Valeur modérée pour de bonnes performances
+            const scale = Math.min(1, maxGeometryResolution / img.width, maxGeometryResolution / img.height);
+            canvas.width = Math.floor(img.width * scale);
+            canvas.height = Math.floor(img.height * scale);
+            console.log(`Résolution géométrie: ${canvas.width} x ${canvas.height}`);
+
+            // Dessiner l'image sur le canvas
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Obtenir les données de l'image
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+
+            // Nettoyer les maillages précédents
+            clearMeshGroup();
+
+            // Calculer les dimensions réelles
+            const realHeightCm = IMAGE_REAL_WIDTH_CM * (canvas.height / canvas.width);
+            const baseThicknessCm = BASE_THICKNESS_MM / 10.0;
+            const thermoThicknessCm = THERMO_THICKNESS_MM / 10.0;
+            console.log(`Dimensions réelles: ${IMAGE_REAL_WIDTH_CM.toFixed(1)} cm x ${realHeightCm.toFixed(1)} cm`);
+
+            // Préparer les tableaux pour stocker les données de la géométrie
+            const geometryTop = new THREE.BufferGeometry();
+            const verticesTop = [];
+            const indices = [];
+            const colorsTop = [];
+            const validPoints = []; // Pour suivre les points qui font partie de l'empreinte
+
+            // --- 1. Générer les sommets et identifier les points dans l'empreinte ---
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const i = (y * canvas.width + x) * 4;
+                    
+                    // Calculer la luminosité (0-255)
+                    const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+                    
+                    // Déterminer si ce pixel fait partie de l'empreinte
+                    const isFootprint = brightness < (255 - PRESSURE_THRESHOLD);
+                    validPoints.push(isFootprint);
+                    
+                    // Calculer la hauteur - pour les points hors de l'empreinte, hauteur = 0
+                    const height = isFootprint ? ((255 - brightness) / 255) * MAX_HEIGHT_CM : 0;
+
+                    // Calculer les coordonnées en cm, centrées
+                    const vx = (x / (canvas.width - 1)) * IMAGE_REAL_WIDTH_CM - (IMAGE_REAL_WIDTH_CM / 2);
+                    const vy = -((y / (canvas.height - 1)) * realHeightCm - (realHeightCm / 2));
+                    const vz = height;
+                    
+                    // Ajouter le vertex
+                    verticesTop.push(vx, vy, vz);
+
+                    // Couleur basée sur la hauteur - bleu pour faible, rouge pour élevé
+                    // Blanc pour les points hors empreinte
+                    const color = new THREE.Color();
+                    if (isFootprint) {
+                        const hue = 0.6 - 0.6 * (height / MAX_HEIGHT_CM);
+                        color.setHSL(hue, 0.8, 0.5);
+                    } else {
+                        color.setRGB(1, 1, 1); // Blanc pour les zones hors empreinte
+                    }
+                    colorsTop.push(color.r, color.g, color.b);
+                }
+            }
+
+            // --- 2. Créer les indices (triangles) uniquement pour les zones valides ---
+            for (let y = 0; y < canvas.height - 1; y++) {
+                for (let x = 0; x < canvas.width - 1; x++) {
+                    const i = y * canvas.width + x;
+                    
+                    // Vérifier si les 4 coins du quad sont valides (dans l'empreinte)
+                    const allInvalid = !(validPoints[i] || validPoints[i + 1] || 
+                                       validPoints[i + canvas.width] || validPoints[i + canvas.width + 1]);
+                    
+                    // Si au moins un point est valide, créer les triangles
+                    if (!allInvalid) {
+                        indices.push(i, i + 1, i + canvas.width);
+                        indices.push(i + 1, i + canvas.width + 1, i + canvas.width);
+                    }
+                }
+            }
+
+            // --- 3. Configurer la géométrie du dessus (empreinte) ---
+            geometryTop.setAttribute('position', new THREE.Float32BufferAttribute(verticesTop, 3));
+            geometryTop.setAttribute('color', new THREE.Float32BufferAttribute(colorsTop, 3));
+            geometryTop.setIndex(indices);
+            geometryTop.computeVertexNormals();
+
+            // --- 4. Créer la géométrie de la semelle thermoplastique ---
+            const geometryThermo = new THREE.BufferGeometry();
+            const verticesThermo = [];
+
+            // Copier les positions de l'empreinte mais décaler vers le bas par l'épaisseur de la thermoplastique
+            for (let i = 0; i < verticesTop.length; i += 3) {
+                verticesThermo.push(verticesTop[i]);                // x
+                verticesThermo.push(verticesTop[i + 1]);            // y
+                verticesThermo.push(verticesTop[i + 2] - thermoThicknessCm); // z décalé vers le bas
+            }
+
+            // Configurer la géométrie de la thermoplastique
+            geometryThermo.setAttribute('position', new THREE.Float32BufferAttribute(verticesThermo, 3));
+            geometryThermo.setIndex(indices);
+            geometryThermo.computeVertexNormals();
+
+            // --- 5. Créer la géométrie de la base plate ---
+            const geometryBase = new THREE.BufferGeometry();
+            const verticesBase = [];
+            const normalsThermo = geometryThermo.attributes.normal.array;
+
+            // Déplacer les points le long de la normale de la thermoplastique
+            for (let i = 0; i < verticesThermo.length; i += 3) {
+                const vx = verticesThermo[i];
+                const vy = verticesThermo[i + 1];
+                const vz = verticesThermo[i + 2];
+
+                const nx = normalsThermo[i];
+                const ny = normalsThermo[i + 1];
+                const nz = normalsThermo[i + 2];
+
+                // Déplacer le long de la normale
+                verticesBase.push(vx - nx * baseThicknessCm);
+                verticesBase.push(vy - ny * baseThicknessCm);
+                verticesBase.push(vz - nz * baseThicknessCm);
+            }
+
+            // Configurer la géométrie de la base
+            geometryBase.setAttribute('position', new THREE.Float32BufferAttribute(verticesBase, 3));
+            geometryBase.setIndex(indices);
+            geometryBase.computeVertexNormals();
+
+            // --- 6. Créer les matériaux ---
+            const materialTop = new THREE.MeshPhongMaterial({
+                vertexColors: true,
+                side: THREE.DoubleSide,
+                shininess: 20,
+                transparent: true,
+                opacity: 1.0
+            });
+
+            const materialThermo = new THREE.MeshPhongMaterial({
+                color: THERMO_COLOR,
+                side: THREE.DoubleSide, 
+                shininess: 50,
+                transparent: true,
+                opacity: Math.max(0.4, 1 - TRANSPARENCY)
+            });
+
+            const materialBase = new THREE.MeshPhongMaterial({
+                color: 0x222222, // Plus sombre pour meilleur contraste
+                side: THREE.DoubleSide,
+                shininess: 10,
+                transparent: true,
+                opacity: Math.max(0.3, 1 - TRANSPARENCY)
+            });
+
+            // --- 7. Créer les maillages ---
+            meshTop = new THREE.Mesh(geometryTop, materialTop);
+            meshGroup.add(meshTop);
+
+            meshThermo = new THREE.Mesh(geometryThermo, materialThermo);
+            meshGroup.add(meshThermo);
+
+            meshBase = new THREE.Mesh(geometryBase, materialBase);
+            meshGroup.add(meshBase);
+
+            // --- 8. Créer les bords entre les couches ---
+            createSideEdges(geometryTop, geometryThermo, canvas.width, canvas.height, THERMO_COLOR, 'thermo');
+            createSideEdges(geometryThermo, geometryBase, canvas.width, canvas.height, 0x222222, 'base');
+
+            // --- 9. Ajuster la caméra pour voir le modèle ---
+            adjustCamera();
+            
+            // --- 10. Mettre à jour l'interface et l'état ---
+            updateVisibility(); // Appliquer les réglages de visibilité
+            statusElement.textContent = "Modèle 3D généré avec succès. Prêt pour export STL.";
+            
+            console.log("Traitement terminé.");
+        }
+
+        function createSideEdges(topGeom, bottomGeom, width, height, color, type) {
+            const topPos = topGeom.attributes.position.array;
+            const bottomPos = bottomGeom.attributes.position.array;
+            
+            // Créer une géométrie pour les bords
+            const edgeGeometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const indices = [];
+            
+            let indexCounter = 0;
+            
+            // Bord avant (Y = 0)
+            for (let x = 0; x < width - 1; x++) {
+                const i = x;
+                const i2 = x + 1;
+                addQuad(i, i2);
+            }
+            
+            // Bord droit (X = width-1)
+            for (let y = 0; y < height - 1; y++) {
+                const i = y * width + (width - 1);
+                const i2 = (y + 1) * width + (width - 1);
+                addQuad(i, i2);
+            }
+            
+            // Bord arrière (Y = height-1)
+            for (let x = width - 1; x > 0; x--) {
+                const i = (height - 1) * width + x;
+                const i2 = (height - 1) * width + (x - 1);
+                addQuad(i, i2);
+            }
+            
+            // Bord gauche (X = 0)
+            for (let y = height - 1; y > 0; y--) {
+                const i = y * width;
+                const i2 = (y - 1) * width;
+                addQuad(i, i2);
+            }
+            
+            function addQuad(i1, i2) {
+                // Vertices du haut (layer 1)
+                const x1 = topPos[i1 * 3];
+                const y1 = topPos[i1 * 3 + 1];
+                const z1 = topPos[i1 * 3 + 2];
+                
+                const x2 = topPos[i2 * 3];
+                const y2 = topPos[i2 * 3 + 1];
+                const z2 = topPos[i2 * 3 + 2];
+                
+                // Vertices du bas (layer 2)
+                const x3 = bottomPos[i1 * 3];
+                const y3 = bottomPos[i1 * 3 + 1];
+                const z3 = bottomPos[i1 * 3 + 2];
+                
+                const x4 = bottomPos[i2 * 3];
+                const y4 = bottomPos[i2 * 3 + 1];
+                const z4 = bottomPos[i2 * 3 + 2];
+                
+                // Ajouter les 4 points (quad)
+                vertices.push(
+                    x1, y1, z1,
+                    x2, y2, z2,
+                    x3, y3, z3,
+                    x4, y4, z4
+                );
+                
+                // Ajouter les indices pour 2 triangles formant un quad
+                indices.push(
+                    indexCounter, indexCounter + 1, indexCounter + 2,
+                    indexCounter + 1, indexCounter + 3, indexCounter + 2
+                );
+                
+                indexCounter += 4;
+            }
+            
+            // Finir la géométrie
+            if (vertices.length > 0) {
+                edgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                edgeGeometry.setIndex(indices);
+                edgeGeometry.computeVertexNormals();
+                
+                // Créer le matériau et le maillage
+                const edgeMaterial = new THREE.MeshPhongMaterial({
+                    color: color,
+                    side: THREE.DoubleSide,
+                    shininess: 30,
+                    transparent: true,
+                    opacity: Math.max(0.5, 1 - TRANSPARENCY)
+                });
+                
+                const edgeMesh = new THREE.Mesh(edgeGeometry, edgeMaterial);
+                edgeMesh.userData.type = type; // Stocker le type pour la visibilité
+                meshGroup.add(edgeMesh);
+                meshEdges.push(edgeMesh);
+            }
+        }
+        function clearMeshGroup() {
+            while(meshGroup.children.length > 0) {
+                const obj = meshGroup.children[0];
+                meshGroup.remove(obj);
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) {
+                         obj.material.forEach(m => m.dispose());
+                    } else {
+                         obj.material.dispose();
+                    }
+                }
+            }
+            meshEdges = []; // Réinitialiser le tableau des bords
+        }
+
+        function adjustCamera() {
+            const boundingBox = new THREE.Box3().setFromObject(meshGroup);
+            const center = boundingBox.getCenter(new THREE.Vector3());
+            const size = boundingBox.getSize(new THREE.Vector3());
+
+            controls.target.copy(center);
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fitOffset = 1.2;
+            const distance = (maxDim / 2) / Math.sin(Math.PI * camera.fov / 360) * fitOffset;
+
+            // Positionne la caméra avec un angle pour mieux voir le relief
+            camera.position.set(
+                center.x, 
+                center.y - distance * 0.8, 
+                center.z + distance * 0.6
+            );
+            camera.lookAt(center);
+
+            controls.update();
+        }
+
+        function exportSTL() {
+            if (meshGroup.children.length === 0) {
+                alert("Veuillez d'abord générer un modèle 3D.");
+                return;
+            }
+            
+            statusElement.textContent = "Préparation de l'export STL...";
+            
+            try {
+                // Vérification que STLExporter est chargé
+                if (typeof THREE.STLExporter === 'undefined') {
+                    throw new Error("STLExporter n'est pas chargé. Vérifiez que le script est disponible.");
+                }
+                
+                // Créer un exportateur STL
+                const exporter = new THREE.STLExporter();
+                
+                // Exporter le modèle en binaire
+                const result = exporter.parse(meshGroup, { binary: true });
+                
+                // Créer un blob pour le téléchargement
+                const blob = new Blob([result], { type: 'application/octet-stream' });
+                
+                // Créer un lien de téléchargement
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'semelle_orthopedique.stl';
+                link.click();
+                
+                statusElement.textContent = "Modèle STL exporté avec succès.";
+            } catch (error) {
+                console.error("Erreur lors de l'export STL:", error);
+                statusElement.textContent = "Erreur lors de l'export: " + error.message;
+                alert("Erreur d'export STL: " + error.message);
+            }
+        }
+
+        // --- Démarrage de l'application ---
+        init();
+    </script>
+</body>
+</html>

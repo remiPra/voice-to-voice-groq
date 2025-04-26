@@ -3,6 +3,7 @@ import Home from "./pages/Home";
 import ChatSansInterruption from "./pages/Help";
 import ProductGallery from "./components/ProductGallery";
 import productsData from "../public/epitact.json"; // Ajoutez cette ligne
+import VRMLipSync from "./components/speech-detector/RobotGentil";
 import EpitactAI from "./pages/Epitact";
 import ChatSimple from "./pages/ChatSimple";
 import ChatDieu from "./pages/ChatDieu";
@@ -16,6 +17,7 @@ import SimpleChatApp from "./components/TranslateWithQrCode";
 import DetectionFinal2 from "./components/speech-detector/DetectionFinal2";
 import DetectionFinal3 from "./components/speech-detector/DetectionFinale3";
 import DetectionFinal4 from "./components/speech-detector/DetectionFinale4";
+import VRMMouthTest from "./components/speech-detector/VRMMouthTest";
 
 
 function App() {
@@ -33,6 +35,7 @@ function App() {
         <Route path="/chinois" element={<TraducteurVacances/>} />
         <Route path="/planches" element={<PlankExerciseApp />} />
         <Route path="/vacances" element={<SimpleChatApp/>} />
+        <Route path="/robot" element={<VRMLipSync/>} />
         <Route path="/" element={<ChatSansInterruption />} />
         <Route path="/chatdieu" element={<ChatDieu />} />
         <Route path="/chatsimple" element={<ChatSimple />} />
@@ -40,7 +43,9 @@ function App() {
           path="/epitact"
           element={<ProductGallery products={productsData} />}
         />
+        <Route path="/mouth" element={<VRMMouthTest />} /> 
         <Route path="/epitactai" element={<EpitactAI />} />
+      
       </Routes>
     </div>
   );
