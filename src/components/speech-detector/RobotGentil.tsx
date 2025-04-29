@@ -46,6 +46,7 @@ interface AvatarProps {
 
 const PHONEME_INTERVAL_MS = 100;
 const LIP_SYNC_LERP_FACTOR = 0.5;
+//@ts-ignore
 const HEAD_ROTATION_LERP_FACTOR = 0.05;
 // --- MODIFICATIONS: Réduction des mouvements du corps et colonne ---
 const BODY_SWAY_LERP_FACTOR = 0.06;
@@ -54,6 +55,7 @@ const BODY_SWAY_AMPLITUDE_ROT_Y = 0.02; // Réduit
 const BODY_SWAY_FREQ_Y = 0.6;
 const BODY_SWAY_FREQ_ROT_Y = 0.4;
 const SPINE_ROTATION_LERP_FACTOR = 0.04;
+//@ts-ignore
 const SPINE_ROTATION_MAX_DEG = 5;
 
 const phonemeToViseme: PhonemeMapping = {
@@ -311,7 +313,7 @@ const Avatar: React.FC<AvatarProps> = ({
       }
     };
   }, [speaking, onSpeechEnd]);
-
+  //@ts-ignore
   useFrame((state: any, delta) => {
     animTime.current += delta;
     const lerp = (current: number, target: number, factor: number) =>
