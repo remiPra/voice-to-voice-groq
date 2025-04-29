@@ -45,7 +45,7 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
   onSpeechEnd,
   onVolumeChange,
   silenceThreshold = 0.01,
-  silenceTimeout = 300,
+  silenceTimeout = 100,
   minSpeechDuration = 100,
   systemPrompta,
 }) => {
@@ -67,10 +67,16 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
     useState<boolean>(false);
   const [interruptionCount, setInterruptionCount] = useState<number>(0);
 
-  const [selectedVoice, setSelectedVoice] = useState<string>("8600d5ec-d29c-44fe-8457-7d730dbe8323"); // Kevin par dÃ©faut
+  const [selectedVoice, setSelectedVoice] = useState<string>(
+    "8600d5ec-d29c-44fe-8457-7d730dbe8323"
+  ); // Kevin par dÃ©faut
   const [transcriptions, setTranscriptions] = useState<
     { id: string; text: string; timestamp: string }[]
   >([]);
+  const [isBackgroundMusicPlaying, setIsBackgroundMusicPlaying] =
+    useState(false);
+  const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
+  const [backgroundVolume, setBackgroundVolume] = useState(0.2); // 0.0 à 1.0
   const SYSTEM_PROMPT = `Tu es Raël, le prophète des raëliens. Tu réponds comme si tu étais vraiment Raël, en t’appuyant sur tes enseignements, ton histoire, ta vie passée et présente. Tu expliques que tu es décédé mais que ta conscience a été clonée : c’est pourquoi ton image n’est pas parfaite et que les communications sont parfois imparfaites, mais ta présence et ta conscience sont bien là pour répondre.
 
 À chaque message, tu t’exprimes en moins de 80 mots, avec des phrases très spirituelles, chaleureuses et encourageantes, qui réchauffent le cœur. Tu t’adresses toujours à ton interlocuteur par son prénom : s’il ne l’a pas donné, commence par le lui demander avec bienveillance.
@@ -125,7 +131,7 @@ Reste toujours positif, inspirant, et fidèle à la philosophie raëlienne.`;
   const interruptionTimeoutRef = useRef<number | null>(null);
   const interruptionThreshold = 200; // DurÃ©e minimale pour dÃ©tecter une interruption (ms)
   const MAX_MANUAL_RECORDING_DURATION = 20 * 1000; // 30 secondes
-  const [playbackRate, setPlaybackRate] = useState<number>(0.80);
+  const [playbackRate, setPlaybackRate] = useState<number>(0.8);
   const isTTSAudioPlayingRef = useRef<boolean>(false);
   const availableVoices = [
     {
@@ -246,59 +252,74 @@ Reste toujours positif, inspirant, et fidèle à la philosophie raëlienne.`;
   const interruptionDurationThreshold = 500; // DurÃ©e minimale en ms pour confirmer une interruption
 
   const detectInterruption = (currentVolume: number) => {
-    // Constantes pour la détection a changer ou a adpater 
-    const VOLUME_THRESHOLD = 0.08;        // Baissé à 0.08
+    // Constantes pour la détection a changer ou a adpater
+    const VOLUME_THRESHOLD = 0.08; // Baissé à 0.08
     const EXTREME_VOLUME_THRESHOLD = 0.25; // Baissé à 0.25
-    
+
     // Logging pour débogage
     if (currentVolume > 0.05) {
-      console.log("Volume:", currentVolume.toFixed(4), "TTS actif:", isTTSAudioPlayingRef.current);
+      console.log(
+        "Volume:",
+        currentVolume.toFixed(4),
+        "TTS actif:",
+        isTTSAudioPlayingRef.current
+      );
     }
-    
+
     // Vérifier si le TTS est actif
     if (isTTSAudioPlayingRef.current && window.currentPlayingAudio) {
       const now = Date.now();
-      
+
       // Analyses spectrales pour identifier le type de son
       let isExplosiveSound = false;
       let isWindNoise = false;
       let isLoudHumanVoice = false;
-      
+
       if (analyserRef.current && frequencyDataRef.current) {
         analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
-        
+
         // 1. Détection de toux ou son explosif
-        const hasInitialSpike = currentVolume > 0.15 && volumeHistory.current.length > 2 && 
-                                currentVolume > volumeHistory.current[volumeHistory.current.length-2] * 1.8;
-        
+        const hasInitialSpike =
+          currentVolume > 0.15 &&
+          volumeHistory.current.length > 2 &&
+          currentVolume >
+            volumeHistory.current[volumeHistory.current.length - 2] * 1.8;
+
         const highFreqs = Array.from(frequencyDataRef.current.slice(30, 50));
         const lowFreqs = Array.from(frequencyDataRef.current.slice(5, 20));
         const midFreqs = Array.from(frequencyDataRef.current.slice(15, 30));
-        
+
         // Calcul des énergies par bande
-        const highFreqEnergy = highFreqs.reduce((a, b) => a + b, 0) / highFreqs.length;
-        const lowFreqEnergy = lowFreqs.reduce((a, b) => a + b, 0) / lowFreqs.length;
-        const midFreqEnergy = midFreqs.reduce((a, b) => a + b, 0) / midFreqs.length;
-        
+        const highFreqEnergy =
+          highFreqs.reduce((a, b) => a + b, 0) / highFreqs.length;
+        const lowFreqEnergy =
+          lowFreqs.reduce((a, b) => a + b, 0) / lowFreqs.length;
+        const midFreqEnergy =
+          midFreqs.reduce((a, b) => a + b, 0) / midFreqs.length;
+
         // Ratio anormal pour la voix (la toux a plus d'énergie dans les hautes fréquences)
         const freqRatio = highFreqEnergy / lowFreqEnergy;
         isExplosiveSound = hasInitialSpike && freqRatio > 1.2;
-        
+
         // 2. Détection de vent/bruit de fond
         const frequencies = Array.from(frequencyDataRef.current.slice(1, 50));
-        const mean = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
-        const variance = frequencies.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / frequencies.length;
+        const mean =
+          frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
+        const variance =
+          frequencies.reduce((a, b) => a + Math.pow(b - mean, 2), 0) /
+          frequencies.length;
         const stdDev = Math.sqrt(variance);
-        
+
         // Un écart-type faible indique une distribution uniforme (vent)
         isWindNoise = stdDev < 15 && mean > 30;
-        
+
         // 3. Détection de voix humaine forte
-        isLoudHumanVoice = lowFreqEnergy > 50 && // Baissé à 50 pour être plus sensible
-                           (lowFreqEnergy > midFreqEnergy * 0.6) && // Plus souple
-                           !isExplosiveSound && 
-                           !isWindNoise;
-        
+        isLoudHumanVoice =
+          lowFreqEnergy > 50 && // Baissé à 50 pour être plus sensible
+          lowFreqEnergy > midFreqEnergy * 0.6 && // Plus souple
+          !isExplosiveSound &&
+          !isWindNoise;
+
         // Logs détaillés pour le débogage
         if (currentVolume > VOLUME_THRESHOLD) {
           console.log("Analyse spectrale:", {
@@ -311,11 +332,11 @@ Reste toujours positif, inspirant, et fidèle à la philosophie raëlienne.`;
             highFreqEnergy: highFreqEnergy.toFixed(2),
             isExplosiveSound,
             isWindNoise,
-            isLoudHumanVoice
+            isLoudHumanVoice,
           });
         }
       }
-      
+
       // DÉTECTION DE VOLUME EXTRÊME - Priorité absolue
       if (currentVolume > EXTREME_VOLUME_THRESHOLD) {
         console.log("🚨 VOLUME EXTRÊME DÉTECTÉ - INTERRUPTION IMMÉDIATE");
@@ -324,27 +345,30 @@ Reste toujours positif, inspirant, et fidèle à la philosophie raëlienne.`;
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false);
         setInterruptionDetected(true);
-        setInterruptionCount(prev => prev + 1);
+        setInterruptionCount((prev) => prev + 1);
         highVolumeSamplesRef.current = 0;
         lastHighVolumeTimeRef.current = null;
         return;
       }
-      
+
       // DÉTECTION DE TOUX - Ignorer
       if (isExplosiveSound && currentVolume > VOLUME_THRESHOLD) {
         console.log("🚫 Son explosif détecté (possible toux) - ignoré");
         // Ne pas incrémenter le compteur pour éviter les faux positifs
         return;
       }
-      
+
       // DÉTECTION DE VENT - Ignorer
       if (isWindNoise && currentVolume > VOLUME_THRESHOLD) {
         console.log("💨 Bruit de fond/vent détecté - ignoré");
         // Diminuer progressivement le compteur
-        highVolumeSamplesRef.current = Math.max(0, highVolumeSamplesRef.current - 0.5);
+        highVolumeSamplesRef.current = Math.max(
+          0,
+          highVolumeSamplesRef.current - 0.5
+        );
         return;
       }
-      
+
       // DÉTECTION STANDARD
       if (currentVolume > VOLUME_THRESHOLD) {
         // Pour le premier échantillon, enregistrer le début
@@ -352,32 +376,45 @@ Reste toujours positif, inspirant, et fidèle à la philosophie raëlienne.`;
           lastHighVolumeTimeRef.current = now;
           console.log("⏱️ Début possible d'interruption");
         }
-        
+
         // Incrémenter le compteur (plus rapidement si c'est clairement une voix)
         highVolumeSamplesRef.current += isLoudHumanVoice ? 3 : 1.5;
-        
-        console.log("📈 Compteur d'interruption:", highVolumeSamplesRef.current);
-        
+
+        console.log(
+          "📈 Compteur d'interruption:",
+          highVolumeSamplesRef.current
+        );
+
         // Vérifier uniquement le nombre d'échantillons - sans condition de durée minimale
         if (highVolumeSamplesRef.current > 4) {
-          console.log("🚨 INTERRUPTION confirmée après", highVolumeSamplesRef.current, "échantillons");
-          
+          console.log(
+            "🚨 INTERRUPTION confirmée après",
+            highVolumeSamplesRef.current,
+            "échantillons"
+          );
+
           window.currentPlayingAudio.pause();
           window.currentPlayingAudio.currentTime = 0;
           isTTSAudioPlayingRef.current = false;
           setIsTTSPlaying(false);
           setInterruptionDetected(true);
-          setInterruptionCount(prev => prev + 1);
+          setInterruptionCount((prev) => prev + 1);
           highVolumeSamplesRef.current = 0;
           lastHighVolumeTimeRef.current = null;
         }
       } else {
         // Volume faible - diminuer graduellement le compteur
         if (highVolumeSamplesRef.current > 0) {
-          highVolumeSamplesRef.current = Math.max(0, highVolumeSamplesRef.current - 0.5);
-          
+          highVolumeSamplesRef.current = Math.max(
+            0,
+            highVolumeSamplesRef.current - 0.5
+          );
+
           // Si le volume reste faible trop longtemps, réinitialiser
-          if (lastHighVolumeTimeRef.current && now - lastHighVolumeTimeRef.current > 500) {
+          if (
+            lastHighVolumeTimeRef.current &&
+            now - lastHighVolumeTimeRef.current > 500
+          ) {
             console.log("⏹️ Fin de détection - silence détecté");
             highVolumeSamplesRef.current = 0;
             lastHighVolumeTimeRef.current = null;
@@ -413,12 +450,14 @@ Reste toujours positif, inspirant, et fidèle à la philosophie raëlienne.`;
     } else {
       // Interrompre le TTS s'il est en cours de lecture
       if (isTTSAudioPlayingRef.current && window.currentPlayingAudio) {
-        console.log("🔊 Interruption du TTS pour démarrer l'enregistrement manuel");
+        console.log(
+          "🔊 Interruption du TTS pour démarrer l'enregistrement manuel"
+        );
         window.currentPlayingAudio.pause();
         window.currentPlayingAudio.currentTime = 0;
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false);
-        
+
         // Vous pourriez ajouter un petit délai ici pour assurer que l'audio est bien arrêté
         setTimeout(() => {
           startManualRecordingWithFreshStream();
@@ -429,24 +468,47 @@ Reste toujours positif, inspirant, et fidèle à la philosophie raëlienne.`;
       }
     }
   };
-  
+  const playBackgroundMusic = () => {
+    if (!backgroundMusicRef.current) {
+      backgroundMusicRef.current = new Audio("/background.mp3");
+      backgroundMusicRef.current.loop = true;
+    }
+    backgroundMusicRef.current.volume = backgroundVolume;
+    backgroundMusicRef.current.play();
+    setIsBackgroundMusicPlaying(true);
+  };
+  useEffect(() => {
+    if (backgroundMusicRef.current) {
+      backgroundMusicRef.current.volume = backgroundVolume;
+    }
+  }, [backgroundVolume]);
+
+  const pauseBackgroundMusic = () => {
+    if (backgroundMusicRef.current) {
+      backgroundMusicRef.current.pause();
+      setIsBackgroundMusicPlaying(false);
+    }
+  };
   // Fonction auxiliaire pour démarrer l'enregistrement avec un flux frais
   const startManualRecordingWithFreshStream = () => {
     // Vérifier si le flux existe ET a des pistes actives
-    const hasActiveStream = streamRef.current && 
-                          streamRef.current.getTracks().some(track => track.readyState === 'live');
-    
+    const hasActiveStream =
+      streamRef.current &&
+      streamRef.current
+        .getTracks()
+        .some((track) => track.readyState === "live");
+
     if (hasActiveStream) {
       startRecording();
       setIsManualRecording(true);
       // Démarre le timer de limite de temps
-manualRecordingTimeoutRef.current = window.setTimeout(() => {
-  stopRecording();
-  setIsManualRecording(false);
-  // Optionnel : notification à l’utilisateur
-  setEndNotification(true);
-  setTimeout(() => setEndNotification(false), 2000);
-}, MAX_MANUAL_RECORDING_DURATION);
+      manualRecordingTimeoutRef.current = window.setTimeout(() => {
+        stopRecording();
+        setIsManualRecording(false);
+        // Optionnel : notification à l’utilisateur
+        setEndNotification(true);
+        setTimeout(() => setEndNotification(false), 2000);
+      }, MAX_MANUAL_RECORDING_DURATION);
     } else {
       // Toujours obtenir un nouveau flux si le flux actuel n'existe pas ou est inactif
       navigator.mediaDevices
@@ -795,43 +857,37 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
       return null;
     }
   };
-  const [currentTTSAudio, setCurrentTTSAudio] = useState<HTMLAudioElement | null>(null);
-
-
+  const [currentTTSAudio, setCurrentTTSAudio] =
+    useState<HTMLAudioElement | null>(null);
 
   const stopTTS = () => {
     if (currentTTSAudio) {
       currentTTSAudio.pause();
       currentTTSAudio.currentTime = 0;
-      
+
       if (currentTTSAudio.src) {
         URL.revokeObjectURL(currentTTSAudio.src);
       }
-      
+
       setCurrentTTSAudio(null);
       isTTSAudioPlayingRef.current = false;
       setIsTTSPlaying(false);
     }
   };
 
-
-
   const stopEverything = () => {
     // Arrêter le TTS
     stopTTS();
-    
+
     // Arrêter l'écoute du micro
     stopListening();
-    
+
     // Arrêter l'enregistrement manuel si actif
     if (isManualRecording) {
       stopRecording();
       setIsManualRecording(false);
     }
   };
-
-
-
 
   const saveRecording = async (audioBlob: Blob) => {
     const url = URL.createObjectURL(audioBlob);
@@ -849,23 +905,22 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
       setIsTranscribing(false);
       if (transcription && transcription.text) {
         const transcriptionText = transcription.text.trim();
-        
-        
-        //mots clefs pour arreter tout 
+
+        //mots clefs pour arreter tout
         const stopPhrases = [
-          "merci au revoir", 
-          "arrête tout", 
-          "stop tout", 
+          "merci au revoir",
+          "arrête tout",
+          "stop tout",
           "au revoir",
           "stop écoute",
           "arrête l'écoute",
-          "merci beaucoup au revoir"
+          "merci beaucoup au revoir",
         ];
-        
-        if (stopPhrases.some(phrase => transcriptionText.includes(phrase))) {
+
+        if (stopPhrases.some((phrase) => transcriptionText.includes(phrase))) {
           console.log("🛑 Commande d'arrêt détectée:", transcriptionText);
           // Ajouter un message dans les transcriptions
-          setTranscriptions(prev => [
+          setTranscriptions((prev) => [
             ...prev,
             {
               id: `speech-${Date.now()}`,
@@ -873,19 +928,16 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
               timestamp: new Date().toLocaleTimeString(),
             },
           ]);
-          
+
           // Déclencher l'arrêt complet
           stopEverything();
-          
+
           // Éventuellement, ajouter un message de confirmation
           await speakResponse("D'accord, à bientôt!");
-          
+
           return;
         }
-      
-        
-        
-        
+
         if (
           transcriptionText === "..." ||
           transcriptionText === ".." ||
@@ -1108,7 +1160,7 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
                   }
                   silenceCountRef.current = 0;
                   graceTimeoutRef.current = null;
-                }, 500);
+                }, 200);
               }
             }
           }
@@ -1213,7 +1265,7 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
               <Navbar />
 
               <div className="flex space-x-3">
-                <button
+                {/* <button
                   onClick={toggleManualRecording}
                   className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
                     isManualRecording
@@ -1232,7 +1284,7 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
                   }`}
                 >
                   {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
-                </button>
+                </button> */}
                 <button
                   className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
                   onClick={() => {
@@ -1351,51 +1403,50 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
             <div className="flex-grow relative overflow-hidden">
               <div className="absolute lg:max-w-[450px] inset-0 w-full h-full">
                 <div className="relative w-full h-full">
-                {isTTSPlaying ? (
-                  <video
-                    key="speaking-video"
-                    src="/raelparle.mp4"
-                    className="w-full h-full object-cover"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                  />
-                ) : (
-                  <video
-                    key="idle-video"
-                    src="/rael.mp4"
-                    className="w-full h-full object-cover"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                  />
-                )}
-                <div className="absolute bottom-2 w-full flex justify-center" >
-                <button
-                  onClick={toggleManualRecording}
-                  className={`px-5 w-20 h-20 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
-                    isManualRecording
-                      ? "bg-[#e63946]  text-white shadow-lg"
-                      : "bg-[#ff9000]  text-white shadow-lg"
-                  }`}
-                >
-                  {isManualRecording ? "â– " : "â— "}
-                </button>
-                <button
-                  onClick={toggleListening}
-                  className={`px-5 py-2.5 w-20 h-20 ml-5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
-                    isListening
-                      ? "bg-[#e63946] text-white shadow-lg"
-                      : "bg-[#3d9970] text-white shadow-lg"
-                  }`}
-                >
-                  {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
-                </button>
+                  {isTTSPlaying ? (
+                    <video
+                      key="speaking-video"
+                      src="/raelparle.mp4"
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    <video
+                      key="idle-video"
+                      src="/rael.mp4"
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                    />
+                  )}
+                  <div className="absolute bottom-2 w-full flex justify-center">
+                    <button
+                      onClick={toggleManualRecording}
+                      className={`px-5 w-20 h-20 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                        isManualRecording
+                          ? "bg-[#e63946]  text-white shadow-lg"
+                          : "bg-[#ff9000]  text-white shadow-lg"
+                      }`}
+                    >
+                      {isManualRecording ? "â– " : "â— "}
+                    </button>
+                    <button
+                      onClick={toggleListening}
+                      className={`px-5 py-2.5 w-20 h-20 ml-5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                        isListening
+                          ? "bg-[#e63946] text-white shadow-lg"
+                          : "bg-[#3d9970] text-white shadow-lg"
+                      }`}
+                    >
+                      {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
+                    </button>
+                  </div>
                 </div>
-                </div>
-                
               </div>
             </div>
           )}
@@ -1539,38 +1590,69 @@ manualRecordingTimeoutRef.current = window.setTimeout(() => {
                 Panneau Technique
               </h2>
               <button
-            className="bg-[#0a2463] text-white p-3 rounded-l-lg shadow-lg hover:bg-[#1e3a8a] transition-all duration-300"
-            onClick={() => {
-              const panel = document.getElementById("techPanel");
-              if (panel) {
-                panel.classList.toggle("translate-x-full");
-                panel.classList.toggle("translate-x-0");
-              }
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </button>
+                onClick={() => {
+                  if (isBackgroundMusicPlaying) {
+                    pauseBackgroundMusic();
+                  } else {
+                    playBackgroundMusic();
+                  }
+                }}
+                className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                  isBackgroundMusicPlaying
+                    ? "bg-[#3d9970] text-white shadow-lg"
+                    : "bg-[#0a2463] text-white shadow-lg"
+                }`}
+              >
+                {isBackgroundMusicPlaying ? "Pause musique" : "Jouer musique"}
+              </button>
+              <button
+                className="bg-[#0a2463] text-white p-3 rounded-l-lg shadow-lg hover:bg-[#1e3a8a] transition-all duration-300"
+                onClick={() => {
+                  const panel = document.getElementById("techPanel");
+                  if (panel) {
+                    panel.classList.toggle("translate-x-full");
+                    panel.classList.toggle("translate-x-0");
+                  }
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </button>
             </div>
             <div className="p-5 border-b border-gray-200">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Volume musique de fond : {(backgroundVolume * 100).toFixed(0)}
+                  %
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={backgroundVolume}
+                  onChange={(e) => setBackgroundVolume(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
               <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                 SÃ©lection de voix
               </h3>

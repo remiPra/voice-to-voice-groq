@@ -45,7 +45,7 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
   onSpeechEnd,
   onVolumeChange,
   silenceThreshold = 0.01,
-  silenceTimeout = 300,
+  silenceTimeout = 50,
   minSpeechDuration = 100,
   systemPrompta,
 }) => {
@@ -223,59 +223,74 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
   const interruptionDurationThreshold = 500; // DurÃ©e minimale en ms pour confirmer une interruption
 
   const detectInterruption = (currentVolume: number) => {
-    // Constantes pour la détection a changer ou a adpater 
-    const VOLUME_THRESHOLD = 0.08;        // Baissé à 0.08
+    // Constantes pour la détection a changer ou a adpater
+    const VOLUME_THRESHOLD = 0.08; // Baissé à 0.08
     const EXTREME_VOLUME_THRESHOLD = 0.25; // Baissé à 0.25
-    
+
     // Logging pour débogage
     if (currentVolume > 0.05) {
-      console.log("Volume:", currentVolume.toFixed(4), "TTS actif:", isTTSAudioPlayingRef.current);
+      console.log(
+        "Volume:",
+        currentVolume.toFixed(4),
+        "TTS actif:",
+        isTTSAudioPlayingRef.current
+      );
     }
-    
+
     // Vérifier si le TTS est actif
     if (isTTSAudioPlayingRef.current && window.currentPlayingAudio) {
       const now = Date.now();
-      
+
       // Analyses spectrales pour identifier le type de son
       let isExplosiveSound = false;
       let isWindNoise = false;
       let isLoudHumanVoice = false;
-      
+
       if (analyserRef.current && frequencyDataRef.current) {
         analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
-        
+
         // 1. Détection de toux ou son explosif
-        const hasInitialSpike = currentVolume > 0.15 && volumeHistory.current.length > 2 && 
-                                currentVolume > volumeHistory.current[volumeHistory.current.length-2] * 1.8;
-        
+        const hasInitialSpike =
+          currentVolume > 0.15 &&
+          volumeHistory.current.length > 2 &&
+          currentVolume >
+            volumeHistory.current[volumeHistory.current.length - 2] * 1.8;
+
         const highFreqs = Array.from(frequencyDataRef.current.slice(30, 50));
         const lowFreqs = Array.from(frequencyDataRef.current.slice(5, 20));
         const midFreqs = Array.from(frequencyDataRef.current.slice(15, 30));
-        
+
         // Calcul des énergies par bande
-        const highFreqEnergy = highFreqs.reduce((a, b) => a + b, 0) / highFreqs.length;
-        const lowFreqEnergy = lowFreqs.reduce((a, b) => a + b, 0) / lowFreqs.length;
-        const midFreqEnergy = midFreqs.reduce((a, b) => a + b, 0) / midFreqs.length;
-        
+        const highFreqEnergy =
+          highFreqs.reduce((a, b) => a + b, 0) / highFreqs.length;
+        const lowFreqEnergy =
+          lowFreqs.reduce((a, b) => a + b, 0) / lowFreqs.length;
+        const midFreqEnergy =
+          midFreqs.reduce((a, b) => a + b, 0) / midFreqs.length;
+
         // Ratio anormal pour la voix (la toux a plus d'énergie dans les hautes fréquences)
         const freqRatio = highFreqEnergy / lowFreqEnergy;
         isExplosiveSound = hasInitialSpike && freqRatio > 1.2;
-        
+
         // 2. Détection de vent/bruit de fond
         const frequencies = Array.from(frequencyDataRef.current.slice(1, 50));
-        const mean = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
-        const variance = frequencies.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / frequencies.length;
+        const mean =
+          frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
+        const variance =
+          frequencies.reduce((a, b) => a + Math.pow(b - mean, 2), 0) /
+          frequencies.length;
         const stdDev = Math.sqrt(variance);
-        
+
         // Un écart-type faible indique une distribution uniforme (vent)
         isWindNoise = stdDev < 15 && mean > 30;
-        
+
         // 3. Détection de voix humaine forte
-        isLoudHumanVoice = lowFreqEnergy > 50 && // Baissé à 50 pour être plus sensible
-                           (lowFreqEnergy > midFreqEnergy * 0.6) && // Plus souple
-                           !isExplosiveSound && 
-                           !isWindNoise;
-        
+        isLoudHumanVoice =
+          lowFreqEnergy > 50 && // Baissé à 50 pour être plus sensible
+          lowFreqEnergy > midFreqEnergy * 0.6 && // Plus souple
+          !isExplosiveSound &&
+          !isWindNoise;
+
         // Logs détaillés pour le débogage
         if (currentVolume > VOLUME_THRESHOLD) {
           console.log("Analyse spectrale:", {
@@ -288,11 +303,11 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
             highFreqEnergy: highFreqEnergy.toFixed(2),
             isExplosiveSound,
             isWindNoise,
-            isLoudHumanVoice
+            isLoudHumanVoice,
           });
         }
       }
-      
+
       // DÉTECTION DE VOLUME EXTRÊME - Priorité absolue
       if (currentVolume > EXTREME_VOLUME_THRESHOLD) {
         console.log("🚨 VOLUME EXTRÊME DÉTECTÉ - INTERRUPTION IMMÉDIATE");
@@ -301,27 +316,30 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false);
         setInterruptionDetected(true);
-        setInterruptionCount(prev => prev + 1);
+        setInterruptionCount((prev) => prev + 1);
         highVolumeSamplesRef.current = 0;
         lastHighVolumeTimeRef.current = null;
         return;
       }
-      
+
       // DÉTECTION DE TOUX - Ignorer
       if (isExplosiveSound && currentVolume > VOLUME_THRESHOLD) {
         console.log("🚫 Son explosif détecté (possible toux) - ignoré");
         // Ne pas incrémenter le compteur pour éviter les faux positifs
         return;
       }
-      
+
       // DÉTECTION DE VENT - Ignorer
       if (isWindNoise && currentVolume > VOLUME_THRESHOLD) {
         console.log("💨 Bruit de fond/vent détecté - ignoré");
         // Diminuer progressivement le compteur
-        highVolumeSamplesRef.current = Math.max(0, highVolumeSamplesRef.current - 0.5);
+        highVolumeSamplesRef.current = Math.max(
+          0,
+          highVolumeSamplesRef.current - 0.5
+        );
         return;
       }
-      
+
       // DÉTECTION STANDARD
       if (currentVolume > VOLUME_THRESHOLD) {
         // Pour le premier échantillon, enregistrer le début
@@ -329,32 +347,45 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
           lastHighVolumeTimeRef.current = now;
           console.log("⏱️ Début possible d'interruption");
         }
-        
+
         // Incrémenter le compteur (plus rapidement si c'est clairement une voix)
         highVolumeSamplesRef.current += isLoudHumanVoice ? 3 : 1.5;
-        
-        console.log("📈 Compteur d'interruption:", highVolumeSamplesRef.current);
-        
+
+        console.log(
+          "📈 Compteur d'interruption:",
+          highVolumeSamplesRef.current
+        );
+
         // Vérifier uniquement le nombre d'échantillons - sans condition de durée minimale
         if (highVolumeSamplesRef.current > 4) {
-          console.log("🚨 INTERRUPTION confirmée après", highVolumeSamplesRef.current, "échantillons");
-          
+          console.log(
+            "🚨 INTERRUPTION confirmée après",
+            highVolumeSamplesRef.current,
+            "échantillons"
+          );
+
           window.currentPlayingAudio.pause();
           window.currentPlayingAudio.currentTime = 0;
           isTTSAudioPlayingRef.current = false;
           setIsTTSPlaying(false);
           setInterruptionDetected(true);
-          setInterruptionCount(prev => prev + 1);
+          setInterruptionCount((prev) => prev + 1);
           highVolumeSamplesRef.current = 0;
           lastHighVolumeTimeRef.current = null;
         }
       } else {
         // Volume faible - diminuer graduellement le compteur
         if (highVolumeSamplesRef.current > 0) {
-          highVolumeSamplesRef.current = Math.max(0, highVolumeSamplesRef.current - 0.5);
-          
+          highVolumeSamplesRef.current = Math.max(
+            0,
+            highVolumeSamplesRef.current - 0.5
+          );
+
           // Si le volume reste faible trop longtemps, réinitialiser
-          if (lastHighVolumeTimeRef.current && now - lastHighVolumeTimeRef.current > 500) {
+          if (
+            lastHighVolumeTimeRef.current &&
+            now - lastHighVolumeTimeRef.current > 500
+          ) {
             console.log("⏹️ Fin de détection - silence détecté");
             highVolumeSamplesRef.current = 0;
             lastHighVolumeTimeRef.current = null;
@@ -386,12 +417,14 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
     } else {
       // Interrompre le TTS s'il est en cours de lecture
       if (isTTSAudioPlayingRef.current && window.currentPlayingAudio) {
-        console.log("🔊 Interruption du TTS pour démarrer l'enregistrement manuel");
+        console.log(
+          "🔊 Interruption du TTS pour démarrer l'enregistrement manuel"
+        );
         window.currentPlayingAudio.pause();
         window.currentPlayingAudio.currentTime = 0;
         isTTSAudioPlayingRef.current = false;
         setIsTTSPlaying(false);
-        
+
         // Vous pourriez ajouter un petit délai ici pour assurer que l'audio est bien arrêté
         setTimeout(() => {
           startManualRecordingWithFreshStream();
@@ -402,13 +435,16 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
       }
     }
   };
-  
+
   // Fonction auxiliaire pour démarrer l'enregistrement avec un flux frais
   const startManualRecordingWithFreshStream = () => {
     // Vérifier si le flux existe ET a des pistes actives
-    const hasActiveStream = streamRef.current && 
-                          streamRef.current.getTracks().some(track => track.readyState === 'live');
-    
+    const hasActiveStream =
+      streamRef.current &&
+      streamRef.current
+        .getTracks()
+        .some((track) => track.readyState === "live");
+
     if (hasActiveStream) {
       startRecording();
       setIsManualRecording(true);
@@ -760,43 +796,37 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
       return null;
     }
   };
-  const [currentTTSAudio, setCurrentTTSAudio] = useState<HTMLAudioElement | null>(null);
-
-
+  const [currentTTSAudio, setCurrentTTSAudio] =
+    useState<HTMLAudioElement | null>(null);
 
   const stopTTS = () => {
     if (currentTTSAudio) {
       currentTTSAudio.pause();
       currentTTSAudio.currentTime = 0;
-      
+
       if (currentTTSAudio.src) {
         URL.revokeObjectURL(currentTTSAudio.src);
       }
-      
+
       setCurrentTTSAudio(null);
       isTTSAudioPlayingRef.current = false;
       setIsTTSPlaying(false);
     }
   };
 
-
-
   const stopEverything = () => {
     // Arrêter le TTS
     stopTTS();
-    
+
     // Arrêter l'écoute du micro
     stopListening();
-    
+
     // Arrêter l'enregistrement manuel si actif
     if (isManualRecording) {
       stopRecording();
       setIsManualRecording(false);
     }
   };
-
-
-
 
   const saveRecording = async (audioBlob: Blob) => {
     const url = URL.createObjectURL(audioBlob);
@@ -814,23 +844,22 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
       setIsTranscribing(false);
       if (transcription && transcription.text) {
         const transcriptionText = transcription.text.trim();
-        
-        
-        //mots clefs pour arreter tout 
+
+        //mots clefs pour arreter tout
         const stopPhrases = [
-          "merci au revoir", 
-          "arrête tout", 
-          "stop tout", 
+          "merci au revoir",
+          "arrête tout",
+          "stop tout",
           "au revoir",
           "stop écoute",
           "arrête l'écoute",
-          "merci beaucoup au revoir"
+          "merci beaucoup au revoir",
         ];
-        
-        if (stopPhrases.some(phrase => transcriptionText.includes(phrase))) {
+
+        if (stopPhrases.some((phrase) => transcriptionText.includes(phrase))) {
           console.log("🛑 Commande d'arrêt détectée:", transcriptionText);
           // Ajouter un message dans les transcriptions
-          setTranscriptions(prev => [
+          setTranscriptions((prev) => [
             ...prev,
             {
               id: `speech-${Date.now()}`,
@@ -838,19 +867,16 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
               timestamp: new Date().toLocaleTimeString(),
             },
           ]);
-          
+
           // Déclencher l'arrêt complet
           stopEverything();
-          
+
           // Éventuellement, ajouter un message de confirmation
           await speakResponse("D'accord, à bientôt!");
-          
+
           return;
         }
-      
-        
-        
-        
+
         if (
           transcriptionText === "..." ||
           transcriptionText === ".." ||
@@ -1069,7 +1095,7 @@ const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
                   }
                   silenceCountRef.current = 0;
                   graceTimeoutRef.current = null;
-                }, 500);
+                }, 100);
               }
             }
           }

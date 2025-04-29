@@ -89,21 +89,21 @@ const Navbar = () => {
               onClick={() => setDrawerOpen(false)}
               className="hover:text-gray-300"
             >
-              Vacances avec le qr code 
-            </Link> 
+              Vacances avec le qr code
+            </Link>
             <Link
               to="/chinois"
               onClick={() => setDrawerOpen(false)}
               className="hover:text-gray-300"
             >
-              Traducteur de Vacances 
+              Traducteur de Vacances
             </Link>
             <Link
               to="/planches"
               onClick={() => setDrawerOpen(false)}
               className="hover:text-gray-300"
             >
-              Planches 
+              Planches
             </Link>
 
             <Link
@@ -133,6 +133,13 @@ const Navbar = () => {
               className="hover:text-gray-300"
             >
               final4
+            </Link>
+            <Link
+              to="/final5"
+              onClick={() => setDrawerOpen(false)}
+              className="hover:text-gray-300"
+            >
+              final5
             </Link>
             <Link
               to="/epitact"

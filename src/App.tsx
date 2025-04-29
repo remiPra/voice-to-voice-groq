@@ -11,14 +11,14 @@ import SpeechDetector from "./components/speech-detector/SpeechDetector";
 import SpeechDetectorClaude from "./components/speech-detector/Testttt";
 import EnglishDetector from "./components/speech-detector/EnglishDetector";
 import DetectionFinal from "./components/speech-detector/DetectionFinal";
-import PlankExerciseApp from './components/PlankExerciseApp';
+import PlankExerciseApp from "./components/PlankExerciseApp";
 import TraducteurVacances from "./components/speech-detector/TraducteurMultilingue";
 import SimpleChatApp from "./components/TranslateWithQrCode";
 import DetectionFinal2 from "./components/speech-detector/DetectionFinal2";
 import DetectionFinal3 from "./components/speech-detector/DetectionFinale3";
 import DetectionFinal4 from "./components/speech-detector/DetectionFinale4";
 import VRMMouthTest from "./components/speech-detector/VRMMouthTest";
-
+import DetectionFinal5 from "./components/speech-detector/DetectionFInale5";
 
 function App() {
   return (
@@ -32,10 +32,11 @@ function App() {
         <Route path="/final2" element={<DetectionFinal2 />} />
         <Route path="/final3" element={<DetectionFinal3 />} />
         <Route path="/final4" element={<DetectionFinal4 />} />
-        <Route path="/chinois" element={<TraducteurVacances/>} />
+        <Route path="/final5" element={<DetectionFinal5 />} />
+        <Route path="/chinois" element={<TraducteurVacances />} />
         <Route path="/planches" element={<PlankExerciseApp />} />
-        <Route path="/vacances" element={<SimpleChatApp/>} />
-        <Route path="/robot" element={<VRMLipSync/>} />
+        <Route path="/vacances" element={<SimpleChatApp />} />
+        <Route path="/robot" element={<VRMLipSync />} />
         <Route path="/" element={<ChatSansInterruption />} />
         <Route path="/chatdieu" element={<ChatDieu />} />
         <Route path="/chatsimple" element={<ChatSimple />} />
@@ -43,9 +44,8 @@ function App() {
           path="/epitact"
           element={<ProductGallery products={productsData} />}
         />
-        <Route path="/mouth" element={<VRMMouthTest />} /> 
+        <Route path="/mouth" element={<VRMMouthTest />} />
         <Route path="/epitactai" element={<EpitactAI />} />
-      
       </Routes>
     </div>
   );
