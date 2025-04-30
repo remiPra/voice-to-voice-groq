@@ -27,7 +27,7 @@ interface Message {
   content: string;
   timestamp?: string;
 }
-
+//@ts-ignore
 interface GroqResponse {
   choices: {
     message: {
@@ -45,8 +45,9 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
   onSpeechEnd,
   onVolumeChange,
   silenceThreshold = 0.01,
-  silenceTimeout = 200, // Réduit de 300ms à 200ms
-  minSpeechDuration = 100,
+  // c'est ici que l'on peut changer le svariabels pour plsu de reactivbité
+  silenceTimeout = 100, // Réduit de 300ms à 200ms
+  minSpeechDuration = 50,
   systemPrompta,
 }) => {
   const [isTTSPlaying, setIsTTSPlaying] = useState<boolean>(false);
@@ -579,6 +580,89 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     }, 100);
   };
 
+  // const handleMessageSubmission = async (content: string) => {
+  //   if (processing.current) return;
+  //   processing.current = true;
+  //   try {
+  //     const userMessage: Message = {
+  //       role: "user",
+  //       content,
+  //       timestamp: new Date().toLocaleTimeString(),
+  //     };
+  //     if (messageHistory.current.length === 0) {
+  //       if (systemPrompta) {
+  //         const systemPrompt = {
+  //           role: "system",
+  //           content: systemPrompta,
+  //         };
+  //         messageHistory.current = [systemPrompt];
+  //       }
+  //     }
+  //     messageHistory.current = [
+  //       ...messageHistory.current,
+  //       { role: "user", content },
+  //     ];
+  //     setMessages((prev) => [...prev, userMessage]);
+  //     setError("");
+
+  //     // Son d'attente
+  //     const waitingAudio = new Audio("/no_input.mp3");
+  //     waitingAudio.loop = true;
+  //     waitingAudio.volume = 0.3;
+  //     waitingAudio.play();
+
+  //     const response = await fetch(
+  //       "https://api.groq.com/openai/v1/chat/completions",
+  //       {
+  //         method: "POST",
+  //         headers: {
+  //           Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify({
+  //           messages: messageHistory.current,
+  //           model: "gemma2-9b-it",
+  //         }),
+  //       }
+  //     );
+  //     waitingAudio.pause();
+  //     waitingAudio.currentTime = 0;
+
+  //     if (!response.ok) {
+  //       const errorData = await response.json();
+  //       throw new Error(errorData.error?.message || "Erreur API");
+  //     }
+  //     const data: GroqResponse = await response.json();
+  //     if (data.choices?.[0]?.message?.content) {
+  //       const assistantContent = cleanLLMResponse(
+  //         data.choices[0].message.content
+  //       );
+
+  //       const assistantMessage: Message = {
+  //         role: "assistant",
+  //         content: assistantContent,
+  //         timestamp: new Date().toLocaleTimeString(),
+  //       };
+  //       messageHistory.current = [
+  //         ...messageHistory.current,
+  //         { role: "assistant", content: assistantContent },
+  //       ];
+  //       setMessages((prev) => [...prev, assistantMessage]);
+  //       scrollToBottom();
+  //       if (messageHistory.current.length > 20) {
+  //         messageHistory.current = messageHistory.current.slice(-20);
+  //       }
+  //       if (typeof speakResponse === "function") {
+  //         speakResponse(assistantContent);
+  //       }
+  //     }
+  //   } catch (error: any) {
+  //     console.error("Erreur:", error);
+  //     setError(`Erreur: ${error.message}`);
+  //   } finally {
+  //     processing.current = false;
+  //   }
+  // };
   const handleMessageSubmission = async (content: string) => {
     if (processing.current) return;
     processing.current = true;
@@ -610,17 +694,20 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
       waitingAudio.volume = 0.3;
       waitingAudio.play();
 
+      // Utilisation de l'API Mistral au lieu de Groq
       const response = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
+        "https://api.mistral.ai/v1/chat/completions",
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+            Authorization: `Bearer ${import.meta.env.VITE_MISTRAL_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             messages: messageHistory.current,
-            model: "gemma2-9b-it",
+            model: "mistral-small-latest", // Ou "mistral-tiny-latest" si tu préfères
+            temperature: 0.7,
+            max_tokens: 500,
           }),
         }
       );
@@ -631,7 +718,8 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
         const errorData = await response.json();
         throw new Error(errorData.error?.message || "Erreur API");
       }
-      const data: GroqResponse = await response.json();
+
+      const data = await response.json();
       if (data.choices?.[0]?.message?.content) {
         const assistantContent = cleanLLMResponse(
           data.choices[0].message.content
@@ -662,7 +750,6 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
       processing.current = false;
     }
   };
-
   const speakResponse = async (text: string) => {
     // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
@@ -900,9 +987,43 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     }
   };
 
+  const downloadConversation = () => {
+    // Préparer le contenu du fichier texte
+    let textContent = "Historique de conversation\n";
+    textContent += "=========================\n\n";
+
+    messages.forEach((msg) => {
+      const role = msg.role === "user" ? "Vous" : "Assistant";
+      textContent += `[${msg.timestamp || ""}] ${role}:\n${msg.content}\n\n`;
+    });
+
+    // Créer un blob pour le téléchargement
+    const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
+    // Créer un lien de téléchargement temporaire
+    const downloadLink = document.createElement("a");
+    downloadLink.href = url;
+    downloadLink.download = `conversation-${new Date()
+      .toISOString()
+      .slice(0, 10)}.txt`;
+
+    // Simuler un clic sur le lien pour lancer le téléchargement
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+
+    // Nettoyer
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+  };
+
   const saveRecording = async (audioBlob: Blob) => {
     const url = URL.createObjectURL(audioBlob);
     const audio = new Audio(url);
+    if (isTTSAudioPlayingRef.current) {
+      console.log("TTS en cours : transcription ignorée.");
+      return;
+    }
     audio.onloadedmetadata = async () => {
       const duration = audio.duration;
       console.log("🎤 Durée de l'audio:", duration, "secondes");
@@ -926,6 +1047,8 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
           "stop écoute",
           "arrête l'écoute",
           "merci beaucoup au revoir",
+          "fin de discussion",
+          "Fin de discussion",
         ];
 
         if (stopPhrases.some((phrase) => transcriptionText.includes(phrase))) {
@@ -1551,6 +1674,30 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                 <h2 className="text-lg font-bold font-['Montserrat',sans-serif]">
                   Panneau Technique
                 </h2>
+                <div className="flex space-x-3">
+                  <button
+                    className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
+                    onClick={downloadConversation}
+                    title="Télécharger la conversation"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                  </button>
+
+                  {/* Vos autres boutons existants */}
+                </div>
                 <button
                   onClick={() => {
                     if (isBackgroundMusicPlaying) {
@@ -1599,6 +1746,7 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   </svg>
                 </button>
               </div>
+
               <div className="p-5 border-b border-gray-200">
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
