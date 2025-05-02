@@ -20,7 +20,6 @@ import DetectionFinal4 from "./components/speech-detector/DetectionFinale4";
 import VRMMouthTest from "./components/speech-detector/VRMMouthTest";
 import DetectionFinal5 from "./components/speech-detector/DetectionFInale5";
 import AudioMarker from "./components/speech-detector/AudioMarker";
-import EventList from "./pages/Fleurs";
 import EventFlower from "./pages/Fleurs";
 
 function App() {
