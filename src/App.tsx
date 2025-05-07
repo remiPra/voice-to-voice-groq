@@ -21,6 +21,7 @@ import VRMMouthTest from "./components/speech-detector/VRMMouthTest";
 import DetectionFinal5 from "./components/speech-detector/DetectionFInale5";
 import AudioMarker from "./components/speech-detector/AudioMarker";
 import EventFlower from "./pages/Fleurs";
+import DetectionFinal6 from "./components/speech-detector/DetectionFInale6";
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
         <Route path="/final2" element={<DetectionFinal2 />} />
         <Route path="/final3" element={<DetectionFinal3 />} />
         <Route path="/final4" element={<DetectionFinal4 />} />
+        <Route path="/final6" element={<DetectionFinal6 />} />
         <Route path="/theatre" element={<AudioMarker />} />
         <Route path="/final5" element={<DetectionFinal5 />} />
         <Route path="/chinois" element={<TraducteurVacances />} />

@@ -155,6 +155,12 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
       voiceId: "d88eff4c-279d-472a-8ce6-9a805c88cb06",
     },
     {
+      id: "dc171287-77a6-49b4-b1a5-1c41360fb688",
+      name: "dart",
+      api: "cartesia",
+      voiceId: "dc171287-77a6-49b4-b1a5-1c41360fb688",
+    },
+    {
       id: "0b1380da-611b-4d00-83f4-8a969a53e4e0",
       name: "helene",
       api: "cartesia",
@@ -216,89 +222,95 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
     speechBooleanStateRef.current = speechBooleanState;
   }, [speechBooleanState]);
   // AudioManager pour garantir un seul audio à la fois
-const AudioManager = {
-  currentAudio: null as HTMLAudioElement | null,
-  
-  play: function(url: string, playbackRate: number = 1.0) {
-    // Si un audio est en cours, on l'arrête d'abord
-    this.stopAll();
-    
-    // Créer le nouvel élément audio
-    const audio = new Audio(url);
-    audio.playbackRate = playbackRate;
-    
-    // Stocker la référence
-    this.currentAudio = audio;
-    window.currentPlayingAudio = audio;
-    
-    // Configurer les événements
-    audio.onplay = () => {
-      console.log("AudioManager: Lecture démarrée");
-      setIsTTSPlaying(true);
-      isTTSAudioPlayingRef.current = true;
-    };
-    
-    audio.onended = () => {
-      console.log("AudioManager: Lecture terminée");
-      this.cleanup();
-      URL.revokeObjectURL(url);
-    };
-    
-    audio.onerror = (e) => {
-      console.error("AudioManager: Erreur de lecture", e);
-      this.cleanup();
-      URL.revokeObjectURL(url);
-    };
-    
-    // Lancer la lecture
-    audio.play().catch(err => {
-      console.error("AudioManager: Impossible de démarrer la lecture", err);
-      this.cleanup();
-    });
-    
-    return audio;
-  },
-  
-  stopAll: function() {
-    console.log("AudioManager: Arrêt de tous les audios");
-    
-    // Arrêter l'audio courant s'il existe
-    if (this.currentAudio) {
-      try {
-        this.currentAudio.pause();
-        this.currentAudio.currentTime = 0;
-        
-        // Revoke URL si c'est un Blob URL
-        if (this.currentAudio.src && this.currentAudio.src.startsWith('blob:')) {
-          URL.revokeObjectURL(this.currentAudio.src);
+  const AudioManager = {
+    currentAudio: null as HTMLAudioElement | null,
+
+    play: function (url: string, playbackRate: number = 1.0) {
+      // Si un audio est en cours, on l'arrête d'abord
+      this.stopAll();
+
+      // Créer le nouvel élément audio
+      const audio = new Audio(url);
+      audio.playbackRate = playbackRate;
+
+      // Stocker la référence
+      this.currentAudio = audio;
+      window.currentPlayingAudio = audio;
+
+      // Configurer les événements
+      audio.onplay = () => {
+        console.log("AudioManager: Lecture démarrée");
+        setIsTTSPlaying(true);
+        isTTSAudioPlayingRef.current = true;
+      };
+
+      audio.onended = () => {
+        console.log("AudioManager: Lecture terminée");
+        this.cleanup();
+        URL.revokeObjectURL(url);
+      };
+
+      audio.onerror = (e) => {
+        console.error("AudioManager: Erreur de lecture", e);
+        this.cleanup();
+        URL.revokeObjectURL(url);
+      };
+
+      // Lancer la lecture
+      audio.play().catch((err) => {
+        console.error("AudioManager: Impossible de démarrer la lecture", err);
+        this.cleanup();
+      });
+
+      return audio;
+    },
+
+    stopAll: function () {
+      console.log("AudioManager: Arrêt de tous les audios");
+
+      // Arrêter l'audio courant s'il existe
+      if (this.currentAudio) {
+        try {
+          this.currentAudio.pause();
+          this.currentAudio.currentTime = 0;
+
+          // Revoke URL si c'est un Blob URL
+          if (
+            this.currentAudio.src &&
+            this.currentAudio.src.startsWith("blob:")
+          ) {
+            URL.revokeObjectURL(this.currentAudio.src);
+          }
+        } catch (e) {
+          console.error("AudioManager: Erreur lors de l'arrêt", e);
         }
-      } catch (e) {
-        console.error("AudioManager: Erreur lors de l'arrêt", e);
       }
-    }
-    
-    // Nettoyer toutes les références
-    this.cleanup();
-    
-    // Parcourir le DOM et arrêter tout autre audio en cours
-    document.querySelectorAll('audio').forEach(audioElement => {
-      try {
-        audioElement.pause();
-        audioElement.currentTime = 0;
-      } catch (e) {
-        console.error("AudioManager: Erreur lors de l'arrêt d'un élément DOM", e);
-      }
-    });
-  },
-  
-  cleanup: function() {
-    // Réinitialiser toutes les références et variables d'état
-    this.currentAudio = null;
-    window.currentPlayingAudio = null;
-    setIsTTSPlaying(false);
-    isTTSAudioPlayingRef.current = false;
-  }
-};
+
+      // Nettoyer toutes les références
+      this.cleanup();
+
+      // Parcourir le DOM et arrêter tout autre audio en cours
+      document.querySelectorAll("audio").forEach((audioElement) => {
+        try {
+          audioElement.pause();
+          audioElement.currentTime = 0;
+        } catch (e) {
+          console.error(
+            "AudioManager: Erreur lors de l'arrêt d'un élément DOM",
+            e
+          );
+        }
+      });
+    },
+
+    cleanup: function () {
+      // Réinitialiser toutes les références et variables d'état
+      this.currentAudio = null;
+      window.currentPlayingAudio = null;
+      setIsTTSPlaying(false);
+      isTTSAudioPlayingRef.current = false;
+    },
+  };
   useEffect(() => {
     if (speechBooleanState === 1) {
       if (!silenceTimerRef.current) {
@@ -339,89 +351,107 @@ const AudioManager = {
   const detectInterruption = (currentVolume: number) => {
     // Constantes pour la détection - seuils optimisés
     const VOLUME_THRESHOLD = 0.06; // Abaissé pour une meilleure sensibilité
-    const EXTREME_VOLUME_THRESHOLD = 0.20; // Abaissé pour détecter plus de cas limites
-    
+    const EXTREME_VOLUME_THRESHOLD = 0.2; // Abaissé pour détecter plus de cas limites
+
     // Logging pour volumes élevés
     if (currentVolume > 0.04) {
-      console.log("Volume:", currentVolume.toFixed(4), "TTS actif:", isTTSAudioPlayingRef.current);
+      console.log(
+        "Volume:",
+        currentVolume.toFixed(4),
+        "TTS actif:",
+        isTTSAudioPlayingRef.current
+      );
     }
-    
+
     // Détecter les interruptions uniquement lorsque le TTS est actif
     if (isTTSAudioPlayingRef.current) {
       const now = Date.now();
-      
+
       // Analyse spectrale avancée
       let isExplosiveSound = false;
       let isDoorbell = false;
       let isWindNoise = false;
       let isLoudHumanVoice = false;
       let isSneeze = false;
-      
+
       if (analyserRef.current && frequencyDataRef.current) {
         analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
-        
+
         // Récupération des données de bandes de fréquences
         const highFreqs = Array.from(frequencyDataRef.current.slice(30, 50));
         const midHighFreqs = Array.from(frequencyDataRef.current.slice(20, 30));
         const midFreqs = Array.from(frequencyDataRef.current.slice(15, 20));
         const lowMidFreqs = Array.from(frequencyDataRef.current.slice(8, 15));
         const lowFreqs = Array.from(frequencyDataRef.current.slice(2, 8));
-        
+
         // Calcul de l'énergie par bande
-        const highFreqEnergy = highFreqs.reduce((a, b) => a + b, 0) / highFreqs.length;
-        const midHighFreqEnergy = midHighFreqs.reduce((a, b) => a + b, 0) / midHighFreqs.length;
-        const midFreqEnergy = midFreqs.reduce((a, b) => a + b, 0) / midFreqs.length;
-        const lowMidFreqEnergy = lowMidFreqs.reduce((a, b) => a + b, 0) / lowMidFreqs.length;
-        const lowFreqEnergy = lowFreqs.reduce((a, b) => a + b, 0) / lowFreqs.length;
-        
+        const highFreqEnergy =
+          highFreqs.reduce((a, b) => a + b, 0) / highFreqs.length;
+        const midHighFreqEnergy =
+          midHighFreqs.reduce((a, b) => a + b, 0) / midHighFreqs.length;
+        const midFreqEnergy =
+          midFreqs.reduce((a, b) => a + b, 0) / midFreqs.length;
+        const lowMidFreqEnergy =
+          lowMidFreqs.reduce((a, b) => a + b, 0) / lowMidFreqs.length;
+        const lowFreqEnergy =
+          lowFreqs.reduce((a, b) => a + b, 0) / lowFreqs.length;
+
         // 1. DÉTECTION DE SONNETTE - Les sonnettes ont des fréquences moyennes-élevées soutenues
-        const hasDoorbellPattern = 
-          midHighFreqEnergy > 60 && 
+        const hasDoorbellPattern =
+          midHighFreqEnergy > 60 &&
           midHighFreqEnergy > lowFreqEnergy * 1.5 &&
           midHighFreqEnergy > highFreqEnergy * 1.2;
-        
+
         // Vérifier si les midHighFreqs ont un motif de pic typique d'une sonnette
-        const hasTonePattern = midHighFreqs.some((val, idx, arr) => 
-          idx > 0 && idx < arr.length - 1 && 
-          val > 80 && val > arr[idx-1] * 1.3 && val > arr[idx+1] * 1.3
+        const hasTonePattern = midHighFreqs.some(
+          (val, idx, arr) =>
+            idx > 0 &&
+            idx < arr.length - 1 &&
+            val > 80 &&
+            val > arr[idx - 1] * 1.3 &&
+            val > arr[idx + 1] * 1.3
         );
-        
+
         isDoorbell = hasDoorbellPattern && hasTonePattern;
-        
+
         // 2. DÉTECTION D'ÉTERNUEMENT - Les éternuements ont des fréquences élevées explosives suivies de fréquences moyennes
-        const hasInitialSpike = 
+        const hasInitialSpike =
           currentVolume > 0.12 &&
           volumeHistory.current.length > 2 &&
-          currentVolume > volumeHistory.current[volumeHistory.current.length - 2] * 1.5;
-        
-        const hasTypicalSneezePattern = 
-          highFreqEnergy > 70 && 
-          midFreqEnergy > 50 && 
+          currentVolume >
+            volumeHistory.current[volumeHistory.current.length - 2] * 1.5;
+
+        const hasTypicalSneezePattern =
+          highFreqEnergy > 70 &&
+          midFreqEnergy > 50 &&
           highFreqEnergy > lowFreqEnergy * 1.8;
-          
+
         isSneeze = hasInitialSpike && hasTypicalSneezePattern;
-        
+
         // 3. DÉTECTION DE SON EXPLOSIF (mais pas un éternuement)
         const freqRatio = highFreqEnergy / lowFreqEnergy;
         isExplosiveSound = hasInitialSpike && freqRatio > 1.2 && !isSneeze;
-        
+
         // 4. DÉTECTION DE BRUIT DE VENT
         const frequencies = Array.from(frequencyDataRef.current.slice(1, 50));
-        const mean = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
-        const variance = frequencies.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / frequencies.length;
+        const mean =
+          frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
+        const variance =
+          frequencies.reduce((a, b) => a + Math.pow(b - mean, 2), 0) /
+          frequencies.length;
         const stdDev = Math.sqrt(variance);
-        
+
         isWindNoise = stdDev < 12 && mean > 25; // Seuil plus strict
-        
+
         // 5. DÉTECTION DE VOIX HUMAINE
-        isLoudHumanVoice = 
-          lowFreqEnergy > 45 && 
+        isLoudHumanVoice =
+          lowFreqEnergy > 45 &&
           lowMidFreqEnergy > 40 &&
-          lowFreqEnergy > midHighFreqEnergy * 0.7 && 
-          !isExplosiveSound && 
+          lowFreqEnergy > midHighFreqEnergy * 0.7 &&
+          !isExplosiveSound &&
           !isWindNoise &&
           !isDoorbell;
-        
+
         // Logging amélioré pour le débogage
         if (currentVolume > VOLUME_THRESHOLD || isDoorbell || isSneeze) {
           console.log("Analyse sonore:", {
@@ -437,46 +467,46 @@ const AudioManager = {
             isSneeze,
             isExplosiveSound,
             isWindNoise,
-            isLoudHumanVoice
+            isLoudHumanVoice,
           });
         }
       }
-      
+
       // GESTION DES INTERRUPTIONS PRIORITAIRE
-      
+
       // 1. VOLUME EXTRÊME - Interruption immédiate
       if (currentVolume > EXTREME_VOLUME_THRESHOLD) {
         console.log("🚨 VOLUME EXTRÊME DÉTECTÉ - INTERRUPTION IMMÉDIATE");
         AudioManager.stopAll();
         setInterruptionDetected(true);
-        setInterruptionCount(prev => prev + 1);
+        setInterruptionCount((prev) => prev + 1);
         highVolumeSamplesRef.current = 0;
         lastHighVolumeTimeRef.current = null;
         return;
       }
-      
+
       // 2. SONNETTE - Interruption haute priorité
       if (isDoorbell && currentVolume > VOLUME_THRESHOLD * 0.8) {
         console.log("🔔 MOTIF DE SONNETTE DÉTECTÉ - INTERRUPTION");
         AudioManager.stopAll();
         setInterruptionDetected(true);
-        setInterruptionCount(prev => prev + 1);
+        setInterruptionCount((prev) => prev + 1);
         highVolumeSamplesRef.current = 0;
         lastHighVolumeTimeRef.current = null;
         return;
       }
-      
+
       // 3. ÉTERNUEMENT - Priorité moyenne, interrompre si évident
       if (isSneeze && currentVolume > VOLUME_THRESHOLD) {
         console.log("🤧 ÉTERNUEMENT DÉTECTÉ - INTERRUPTION");
         AudioManager.stopAll();
         setInterruptionDetected(true);
-        setInterruptionCount(prev => prev + 1);
+        setInterruptionCount((prev) => prev + 1);
         highVolumeSamplesRef.current = 0;
         lastHighVolumeTimeRef.current = null;
         return;
       }
-      
+
       // 4. SONS EXPLOSIFS - Peuvent être ignorés
       if (isExplosiveSound && currentVolume > VOLUME_THRESHOLD) {
         console.log("💥 Son explosif détecté - surveillance...");
@@ -484,15 +514,18 @@ const AudioManager = {
         highVolumeSamplesRef.current += 0.5;
         return;
       }
-      
+
       // 5. BRUIT DE VENT - Ignorer
       if (isWindNoise && currentVolume > VOLUME_THRESHOLD) {
         console.log("💨 Bruit de fond/vent détecté - ignoré");
         // Diminuer le compteur pour éviter les faux déclenchements
-        highVolumeSamplesRef.current = Math.max(0, highVolumeSamplesRef.current - 0.5);
+        highVolumeSamplesRef.current = Math.max(
+          0,
+          highVolumeSamplesRef.current - 0.5
+        );
         return;
       }
-      
+
       // 6. DÉTECTION DE VOIX STANDARD avec seuil adaptatif
       if (currentVolume > VOLUME_THRESHOLD) {
         // Initialiser pour le premier échantillon à volume élevé
@@ -500,19 +533,25 @@ const AudioManager = {
           lastHighVolumeTimeRef.current = now;
           console.log("⏱️ Début possible d'interruption");
         }
-        
+
         // Incrémenter le compteur (plus rapidement pour la voix humaine claire)
         highVolumeSamplesRef.current += isLoudHumanVoice ? 1.75 : 0.75;
-        console.log("📈 Compteur d'interruption:", highVolumeSamplesRef.current);
-        
+        console.log(
+          "📈 Compteur d'interruption:",
+          highVolumeSamplesRef.current
+        );
+
         // Vérifier l'interruption soutenue - seuil abaissé à 3.5 pour une réponse plus rapide
         if (highVolumeSamplesRef.current > 3.5) {
-          console.log("🚨 INTERRUPTION VOCALE confirmée après", 
-                      highVolumeSamplesRef.current, "échantillons");
-          
+          console.log(
+            "🚨 INTERRUPTION VOCALE confirmée après",
+            highVolumeSamplesRef.current,
+            "échantillons"
+          );
+
           AudioManager.stopAll();
           setInterruptionDetected(true);
-          setInterruptionCount(prev => prev + 1);
+          setInterruptionCount((prev) => prev + 1);
           highVolumeSamplesRef.current = 0;
           lastHighVolumeTimeRef.current = null;
         }
@@ -520,10 +559,16 @@ const AudioManager = {
         // Volume sous le seuil - diminuer progressivement le compteur
         if (highVolumeSamplesRef.current > 0) {
           // Décroissance plus rapide pour une réinitialisation plus rapide
-          highVolumeSamplesRef.current = Math.max(0, highVolumeSamplesRef.current - 0.75);
-          
+          highVolumeSamplesRef.current = Math.max(
+            0,
+            highVolumeSamplesRef.current - 0.75
+          );
+
           // Réinitialiser si le silence persiste
-          if (lastHighVolumeTimeRef.current && now - lastHighVolumeTimeRef.current > 400) {
+          if (
+            lastHighVolumeTimeRef.current &&
+            now - lastHighVolumeTimeRef.current > 400
+          ) {
             console.log("⏹️ Fin de détection - silence détecté");
             highVolumeSamplesRef.current = 0;
             lastHighVolumeTimeRef.current = null;
@@ -559,9 +604,11 @@ const AudioManager = {
     } else {
       // Interrompre le TTS s'il est en cours de lecture
       if (isTTSAudioPlayingRef.current) {
-        console.log("🔊 Interruption du TTS pour démarrer l'enregistrement manuel");
+        console.log(
+          "🔊 Interruption du TTS pour démarrer l'enregistrement manuel"
+        );
         AudioManager.stopAll();
-  
+
         // Vous pourriez ajouter un petit délai ici pour assurer que l'audio est bien arrêté
         setTimeout(() => {
           startManualRecordingWithFreshStream();
@@ -766,10 +813,7 @@ const AudioManager = {
       processing.current = false;
     }
   };
-  
-  
-  
-  
+
   // const handleMessageSubmission = async (content: string) => {
   //   if (processing.current) return;
   //   processing.current = true;
@@ -857,40 +901,73 @@ const AudioManager = {
   //     processing.current = false;
   //   }
   // };
+
+  // Ajoutez ce gestionnaire d'événement à votre champ input texte
+  const handleInputFocus = () => {
+    // Si un audio est en cours de lecture, l'arrêter
+    if (isTTSAudioPlayingRef.current) {
+      console.log("🖋️ Input détecté - Arrêt de l'audio en cours");
+      AudioManager.stopAll();
+    }
+  };
+
+  // Cet événement sera déclenché à chaque modification du champ
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newText = e.target.value;
+    setInputText(newText);
+
+    // Si l'utilisateur commence à taper et qu'un audio est en cours
+    if (
+      newText &&
+      (isTTSAudioPlayingRef.current || window.currentPlayingAudio)
+    ) {
+      console.log("🖋️ Saisie détectée - Arrêt de l'audio en cours");
+      AudioManager.stopAll();
+      stopTTS();
+      stopEverything();
+    }
+  };
   const speakResponse = async (text: string) => {
     // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
-    
+
     // Arrêter tout audio en cours de lecture
     AudioManager.stopAll();
-    
+
     // Réinitialiser l'état d'interruption
     setInterruptionDetected(false);
     lastSpeechTimeRef.current = null;
-  
+
     // Récupérer la voix actuellement sélectionnée
     const currentSelectedVoice = selectedVoice;
     console.log("Synthèse vocale avec voix ID:", currentSelectedVoice);
-  
+
     // Trouver les informations de la voix sélectionnée
     const selectedVoiceInfo = availableVoices.find(
       (voice) => voice.id === currentSelectedVoice
     );
-  
+
     if (!selectedVoiceInfo) {
-      console.error("Erreur: Voix non trouvée dans la liste des voix disponibles");
+      console.error(
+        "Erreur: Voix non trouvée dans la liste des voix disponibles"
+      );
       return;
     }
-  
-    console.log(`Utilisation de la voix: ${selectedVoiceInfo.name} (${selectedVoiceInfo.api})`);
-  
+
+    console.log(
+      `Utilisation de la voix: ${selectedVoiceInfo.name} (${selectedVoiceInfo.api})`
+    );
+
     try {
       let response;
-  
+
       // Appeler l'API appropriée selon le type de voix sélectionnée
       if (selectedVoiceInfo.api === "cartesia") {
         // API Cartesia
-        console.log("Appel API Cartesia avec voiceId:", selectedVoiceInfo.voiceId);
+        console.log(
+          "Appel API Cartesia avec voiceId:",
+          selectedVoiceInfo.voiceId
+        );
         response = await fetch("https://api.cartesia.ai/tts/bytes", {
           method: "POST",
           headers: {
@@ -930,23 +1007,25 @@ const AudioManager = {
       } else {
         throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
       }
-  
+
       // Vérifier si la réponse est OK
       if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status} - ${response.statusText}`);
+        throw new Error(
+          `Erreur HTTP: ${response.status} - ${response.statusText}`
+        );
       }
       setIsLoadingResponse(false);
-  
+
       // Convertir la réponse en blob audio
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
-  
+
       // Ajouter l'URL à la liste des audios générés
       setAudioUrls((prev) => [...prev, audioUrl]);
-  
+
       // Utiliser le gestionnaire audio pour lire l'audio
       AudioManager.play(audioUrl, playbackRate);
-  
+
       // Mettre en place une surveillance des interruptions
       let interruptionCheckInterval = setInterval(() => {
         if (interruptionDetected) {
@@ -955,7 +1034,6 @@ const AudioManager = {
           clearInterval(interruptionCheckInterval);
         }
       }, 100);
-  
     } catch (error) {
       console.error("Erreur lors de la génération ou lecture du TTS:", error);
       AudioManager.cleanup();
@@ -1007,23 +1085,23 @@ const AudioManager = {
   const [currentTTSAudio, setCurrentTTSAudio] =
     useState<HTMLAudioElement | null>(null);
 
-    const stopTTS = () => {
-      AudioManager.stopAll();
-    };
-    
-    const stopEverything = () => {
-      // Arrêter le TTS
-      AudioManager.stopAll();
-    
-      // Arrêter l'écoute du micro
-      stopListening();
-    
-      // Arrêter l'enregistrement manuel si actif
-      if (isManualRecording) {
-        stopRecording();
-        setIsManualRecording(false);
-      }
-    };
+  const stopTTS = () => {
+    AudioManager.stopAll();
+  };
+
+  const stopEverything = () => {
+    // Arrêter le TTS
+    AudioManager.stopAll();
+
+    // Arrêter l'écoute du micro
+    stopListening();
+
+    // Arrêter l'enregistrement manuel si actif
+    if (isManualRecording) {
+      stopRecording();
+      setIsManualRecording(false);
+    }
+  };
 
   const downloadConversation = () => {
     // Préparer le contenu du fichier texte
@@ -1058,14 +1136,14 @@ const AudioManager = {
   const saveRecording = async (audioBlob: Blob) => {
     const url = URL.createObjectURL(audioBlob);
     const audio = new Audio(url);
-    
+
     // Vérification cruciale: Ne pas transcrire si un TTS est en cours
     if (isTTSAudioPlayingRef.current) {
       console.log("TTS en cours : transcription ignorée.");
       URL.revokeObjectURL(url);
       return;
     }
-    
+
     audio.onloadedmetadata = async () => {
       const duration = audio.duration;
       console.log("🎤 Durée de l'audio:", duration, "secondes");
@@ -1080,7 +1158,7 @@ const AudioManager = {
       setIsTranscribing(false);
       if (transcription && transcription.text) {
         const transcriptionText = transcription.text.trim();
-  
+
         //mots clefs pour arreter tout
         const stopPhrases = [
           "merci au revoir",
@@ -1093,7 +1171,7 @@ const AudioManager = {
           "fin de discussion",
           "Fin de discussion",
         ];
-  
+
         if (stopPhrases.some((phrase) => transcriptionText.includes(phrase))) {
           console.log("🛑 Commande d'arrêt détectée:", transcriptionText);
           // Ajouter un message dans les transcriptions
@@ -1105,16 +1183,16 @@ const AudioManager = {
               timestamp: new Date().toLocaleTimeString(),
             },
           ]);
-  
+
           // Déclencher l'arrêt complet
           stopEverything();
-  
+
           // Éventuellement, ajouter un message de confirmation
           await speakResponse("D'accord, à bientôt!");
-  
+
           return;
         }
-  
+
         if (
           transcriptionText === "..." ||
           transcriptionText === ".." ||
@@ -1147,7 +1225,6 @@ const AudioManager = {
       URL.revokeObjectURL(url);
     };
   };
-
 
   useEffect(() => {
     // Cette fonction s'exécute chaque fois que interruptionDetected change
@@ -1694,7 +1771,39 @@ const AudioManager = {
               <input
                 type="text"
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={(e) => {
+                  // Sauvegarde l'état actuel avant de modifier l'input
+                  const audioWasPlaying = isTTSAudioPlayingRef.current;
+
+                  // Mettre à jour l'input
+                  setInputText(e.target.value);
+
+                  // Si un audio était en cours de lecture, l'arrêter immédiatement
+                  if (audioWasPlaying) {
+                    console.log(
+                      "🖋️ Saisie détectée - Arrêt de l'audio en cours"
+                    );
+
+                    // Approche directe comme dans votre code d'interruption vocale
+                    if (window.currentPlayingAudio) {
+                      // Approche 1: Méthode standard
+                      window.currentPlayingAudio.pause();
+                      window.currentPlayingAudio.currentTime = 0;
+
+                      // Approche 2: Vider la source
+                      window.currentPlayingAudio.src = "";
+
+                      // Mettre à jour les états
+                      isTTSAudioPlayingRef.current = false;
+                      setIsTTSPlaying(false);
+
+                      // Puis appel à AudioManager pour nettoyer
+                      AudioManager.stopAll();
+
+                      console.log("✅ Audio forcé à l'arrêt via input");
+                    }
+                  }
+                }}
                 placeholder="Écrivez votre message..."
                 className="flex-grow px-5 py-3 bg-[#f5f7fa] border border-gray-300 rounded-l-full text-[#0a2463] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-transparent"
                 disabled={processing.current}

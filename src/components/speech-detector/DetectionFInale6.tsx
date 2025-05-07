@@ -41,7 +41,7 @@ interface TranscriptionResult {
   text: string;
 }
 
-const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
+const DetectionFinal6: React.FC<SpeechDetectorProps> = ({
   onSpeechStart,
   onSpeechEnd,
   onVolumeChange,
@@ -70,7 +70,9 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     useState<boolean>(false);
   const [interruptionCount, setInterruptionCount] = useState<number>(0);
 
-  const [selectedVoice, setSelectedVoice] = useState<string>("nathalie"); // Kevin par défaut
+  const [selectedVoice, setSelectedVoice] = useState<string>(
+    "dc171287-77a6-49b4-b1a5-1c41360fb688"
+  ); // Kevin par défaut
   const [transcriptions, setTranscriptions] = useState<
     { id: string; text: string; timestamp: string }[]
   >([]);
@@ -1670,7 +1672,7 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   {isTTSPlaying ? (
                     <video
                       key="speaking-video"
-                      src="/raelparle.mp4"
+                      src="/dart2.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -1680,7 +1682,7 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   ) : (
                     <video
                       key="idle-video"
-                      src="/rael.mp4"
+                      src="/dart1.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -2109,4 +2111,4 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
   );
 };
 
-export default DetectionFinal5;
+export default DetectionFinal6;
