@@ -22,6 +22,8 @@ import DetectionFinal5 from "./components/speech-detector/DetectionFInale5";
 import AudioMarker from "./components/speech-detector/AudioMarker";
 import EventFlower from "./pages/Fleurs";
 import DetectionFinal6 from "./components/speech-detector/DetectionFInale6";
+import DetectionFinal7 from "./components/speech-detector/DetectionFinale7";
+import VoiceComponent from "./components/hooks/Main";
 
 function App() {
   return (
@@ -38,6 +40,7 @@ function App() {
         <Route path="/final6" element={<DetectionFinal6 />} />
         <Route path="/theatre" element={<AudioMarker />} />
         <Route path="/final5" element={<DetectionFinal5 />} />
+        <Route path="/final7" element={<DetectionFinal7 />} />
         <Route path="/chinois" element={<TraducteurVacances />} />
         <Route path="/planches" element={<PlankExerciseApp />} />
         <Route path="/vacances" element={<SimpleChatApp />} />
@@ -50,6 +53,7 @@ function App() {
           element={<ProductGallery products={productsData} />}
         />
         <Route path="/mouth" element={<VRMMouthTest />} />
+        <Route path="/complete" element={<VoiceComponent />} />
         <Route path="/fleurs" element={<EventFlower />} />
         <Route path="/epitactai" element={<EpitactAI />} />
       </Routes>

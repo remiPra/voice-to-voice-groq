@@ -972,8 +972,8 @@ const SimpleChatApp: React.FC = () => {
 
       {/* Afficher l'alerte rouge lorsqu'un autre utilisateur est en train d'enregistrer */}
       {recordingUser && recordingUser !== userId && (
-        <div className="p-4 bg-red-500 text-white text-center font-bold animate-pulse">
-          Un autre participant est en train de parler, veuillez attendre...
+        <div className="fixed top-0 left-0 text-5xl p-4 bg-red-500 text-white text-center font-bold animate-pulse">
+          waiting please
         </div>
       )}
 

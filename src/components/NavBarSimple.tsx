@@ -125,7 +125,7 @@ const Navbar = () => {
               onClick={() => setDrawerOpen(false)}
               className="hover:text-gray-300"
             >
-              final3
+              version parfaite
             </Link>
             <Link
               to="/final4"
