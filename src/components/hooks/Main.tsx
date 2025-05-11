@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useAudioManager } from "./useAudioManager";
 import { useAudioQueue } from "./useAudioQueue";
-import { useSpeechDetection } from "./useSpeechdDetection";
+import { useSpeechDetection } from "./useSpeechDetection";
 import { useInterruptionDetector } from "./useInterruptionDetector";
 import { useRecording } from "./useRecording";
 import { useTranscription } from "./useTranscription";
