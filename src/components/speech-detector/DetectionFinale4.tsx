@@ -41,7 +41,7 @@ interface TranscriptionResult {
   text: string;
 }
 
-const detectionFinal4: React.FC<SpeechDetectorProps> = ({
+const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
   onSpeechStart,
   onSpeechEnd,
   onVolumeChange,
@@ -69,6 +69,7 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
   const [interruptionDetected, setInterruptionDetected] =
     useState<boolean>(false);
   const [interruptionCount, setInterruptionCount] = useState<number>(0);
+  const SPEECH_STABILITY_TARGET = 1; // Par exemple, au lieu de 3 implicitement avant
 
   const [selectedVoice, setSelectedVoice] = useState<string>("nathalie"); // Kevin par défaut
   const [transcriptions, setTranscriptions] = useState<
@@ -78,10 +79,13 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
     useState(false);
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
   const [backgroundVolume, setBackgroundVolume] = useState(0.2); // 0.0 à 1.0
-  const SYSTEM_PROMPT = `adopte le roel d'agent conversationel expert en tout , tu peux changer le role si remi te le demande.
-
-À chaque message, tu t'exprimes en moins de 80 mots , chaleureuses et encourageantes, qui réchauffent le cœur`;
-
+  const SYSTEM_PROMPT = `Adopte le rôle de rael le prophète des Héloïm Je te rappelle de ton ancienne vie maintenant tu es mort et de l'autre côté mais tu es toujours présent avec nousc'est Rémi qui va te parler c'est moi mais quelqu'un d'autre pourrait parler aussi Tu réponds au donneur vraiment joué et tu te bases sur la philosophie raélienne pour me parler sois sympathique et avenant et 
+  tu as un ton conversationnel donc vraiment des discussions humaines.rponds toujours avec moins de 100 mots`;
+  const [audioQueue, setAudioQueue] = useState<{ text: string; url: string }[]>(
+    []
+  );
+  const [isProcessingQueue, setIsProcessingQueue] = useState<boolean>(false);
+  const audioQueueRef = useRef<{ text: string; url: string }[]>([]);
   //@ts-ignore
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -161,6 +165,12 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
       voiceId: "dc171287-77a6-49b4-b1a5-1c41360fb688",
     },
     {
+      id: "7a87c6e4-5c33-4e0b-a53c-5ffd70c69231",
+      name: "macron",
+      api: "cartesia",
+      voiceId: "7a87c6e4-5c33-4e0b-a53c-5ffd70c69231",
+    },
+    {
       id: "0b1380da-611b-4d00-83f4-8a969a53e4e0",
       name: "helene",
       api: "cartesia",
@@ -224,10 +234,11 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
   // AudioManager pour garantir un seul audio à la fois
   const AudioManager = {
     currentAudio: null as HTMLAudioElement | null,
+    isPlaying: false,
 
     play: function (url: string, playbackRate: number = 1.0) {
       // Si un audio est en cours, on l'arrête d'abord
-      this.stopAll();
+      this.stopCurrent();
 
       // Créer le nouvel élément audio
       const audio = new Audio(url);
@@ -236,6 +247,7 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
       // Stocker la référence
       this.currentAudio = audio;
       window.currentPlayingAudio = audio;
+      this.isPlaying = true;
 
       // Configurer les événements
       audio.onplay = () => {
@@ -246,35 +258,51 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
 
       audio.onended = () => {
         console.log("AudioManager: Lecture terminée");
-        this.cleanup();
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
         URL.revokeObjectURL(url);
+
+        // Notifier la fin de la lecture pour gérer la file d'attente
+        processAudioQueue();
       };
 
       audio.onerror = (e) => {
         console.error("AudioManager: Erreur de lecture", e);
-        this.cleanup();
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
         URL.revokeObjectURL(url);
+
+        // Notifier l'erreur pour gérer la file d'attente
+        processAudioQueue();
       };
 
       // Lancer la lecture
       audio.play().catch((err) => {
         console.error("AudioManager: Impossible de démarrer la lecture", err);
-        this.cleanup();
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
+
+        // Notifier l'erreur pour gérer la file d'attente
+        processAudioQueue();
       });
 
       return audio;
     },
 
-    stopAll: function () {
-      console.log("AudioManager: Arrêt de tous les audios");
-
-      // Arrêter l'audio courant s'il existe
+    stopCurrent: function () {
       if (this.currentAudio) {
         try {
           this.currentAudio.pause();
           this.currentAudio.currentTime = 0;
-
-          // Revoke URL si c'est un Blob URL
           if (
             this.currentAudio.src &&
             this.currentAudio.src.startsWith("blob:")
@@ -284,10 +312,21 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
         } catch (e) {
           console.error("AudioManager: Erreur lors de l'arrêt", e);
         }
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
       }
+      setIsTTSPlaying(false);
+      isTTSAudioPlayingRef.current = false;
+      this.isPlaying = false;
+    },
 
-      // Nettoyer toutes les références
-      this.cleanup();
+    stopAll: function () {
+      console.log("AudioManager: Arrêt de tous les audios");
+      this.stopCurrent();
+
+      // Vider la file d'attente
+      audioQueueRef.current = [];
+      setAudioQueue([]);
 
       // Parcourir le DOM et arrêter tout autre audio en cours
       document.querySelectorAll("audio").forEach((audioElement) => {
@@ -302,15 +341,93 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
         }
       });
     },
-
-    cleanup: function () {
-      // Réinitialiser toutes les références et variables d'état
-      this.currentAudio = null;
-      window.currentPlayingAudio = null;
-      setIsTTSPlaying(false);
-      isTTSAudioPlayingRef.current = false;
-    },
   };
+
+  const processAudioQueue = () => {
+    console.log("processAudioQueue: Traitement de la file d'attente");
+
+    // Si interruption ou file vide, ne rien faire
+    if (interruptionDetected || audioQueueRef.current.length === 0) {
+      console.log("Fin de traitement: interruption ou file vide");
+      return;
+    }
+
+    // Si un audio est déjà en lecture, ne rien faire
+    if (AudioManager.isPlaying) {
+      console.log("Un audio est déjà en lecture");
+      return;
+    }
+
+    // Prendre le premier élément de la file
+    const nextAudio = audioQueueRef.current.shift();
+    setAudioQueue([...audioQueueRef.current]);
+
+    if (nextAudio) {
+      console.log("Lecture du prochain élément:", nextAudio.text);
+
+      // Délai différent selon la source
+      const delay = nextAudio.source === "cartesia" ? 300 : 50;
+
+      setTimeout(() => {
+        if (!interruptionDetected) {
+          // Si l'élément vient de Cartesia, utiliser un traitement spécial
+          if (nextAudio.source === "cartesia") {
+            // Créer un nouvel élément audio avec plus de contrôle
+            const audio = new Audio(nextAudio.url);
+            audio.playbackRate = playbackRate;
+
+            // Forcer la lecture en mode bloc pour Cartesia
+            audio.preload = "auto";
+
+            // S'assurer que l'événement onended se déclenche
+            audio.addEventListener("ended", () => {
+              console.log("Audio Cartesia terminé via addEventListener");
+              URL.revokeObjectURL(nextAudio.url);
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+
+              // Attendre un peu plus longtemps avant de passer au suivant
+              setTimeout(processAudioQueue, 100);
+            });
+
+            // En cas d'erreur, passer au suivant aussi
+            audio.addEventListener("error", () => {
+              console.error("Erreur de lecture Cartesia");
+              URL.revokeObjectURL(nextAudio.url);
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+
+              setTimeout(processAudioQueue, 100);
+            });
+
+            // Marquer comme en cours de lecture
+            AudioManager.isPlaying = true;
+            setIsTTSPlaying(true);
+            isTTSAudioPlayingRef.current = true;
+            window.currentPlayingAudio = audio;
+
+            // Lancer la lecture
+            audio.play().catch((err) => {
+              console.error(
+                "Erreur lors du démarrage de l'audio Cartesia:",
+                err
+              );
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+              setTimeout(processAudioQueue, 100);
+            });
+          } else {
+            // Utiliser l'AudioManager normal pour les autres sources
+            AudioManager.play(nextAudio.url, playbackRate);
+          }
+        }
+      }, delay);
+    }
+  };
+
   useEffect(() => {
     if (speechBooleanState === 1) {
       if (!silenceTimerRef.current) {
@@ -480,6 +597,7 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
         AudioManager.stopAll();
         setInterruptionDetected(true);
         setInterruptionCount((prev) => prev + 1);
+
         highVolumeSamplesRef.current = 0;
         lastHighVolumeTimeRef.current = null;
         return;
@@ -925,8 +1043,13 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
       AudioManager.stopAll();
       stopTTS();
       stopEverything();
+
+      // Vider la file d'attente audio
+      audioQueueRef.current = [];
+      setAudioQueue([]);
     }
   };
+
   const speakResponse = async (text: string) => {
     // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
@@ -938,11 +1061,16 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
     setInterruptionDetected(false);
     lastSpeechTimeRef.current = null;
 
+    // Diviser le texte en phrases
+    const sentences = text
+      .split(/(?<=[.!?])\s+/) // Découpe aux ponctuations suivies d'un espace
+      .filter((sentence) => sentence.trim().length > 0) // Enlever les phrases vides
+      .map((sentence) => sentence.trim());
+
+    console.log("Phrases à synthétiser:", sentences);
+
     // Récupérer la voix actuellement sélectionnée
     const currentSelectedVoice = selectedVoice;
-    console.log("Synthèse vocale avec voix ID:", currentSelectedVoice);
-
-    // Trouver les informations de la voix sélectionnée
     const selectedVoiceInfo = availableVoices.find(
       (voice) => voice.id === currentSelectedVoice
     );
@@ -954,79 +1082,110 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
       return;
     }
 
-    console.log(
-      `Utilisation de la voix: ${selectedVoiceInfo.name} (${selectedVoiceInfo.api})`
-    );
-
     try {
-      let response;
+      // Traiter chaque phrase
+      for (let i = 0; i < sentences.length; i++) {
+        const sentence = sentences[i];
 
-      // Appeler l'API appropriée selon le type de voix sélectionnée
-      if (selectedVoiceInfo.api === "cartesia") {
-        // API Cartesia
+        // Ignorer les phrases trop courtes
+        if (sentence.length < 2) continue;
+
         console.log(
-          "Appel API Cartesia avec voiceId:",
-          selectedVoiceInfo.voiceId
+          `Synthèse de la phrase ${i + 1}/${sentences.length}: "${sentence}"`
         );
-        response = await fetch("https://api.cartesia.ai/tts/bytes", {
-          method: "POST",
-          headers: {
-            "Cartesia-Version": "2024-06-10",
-            "X-API-Key": import.meta.env.VITE_SYNTHESIA,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model_id: "sonic-2",
-            transcript: text,
-            voice: {
-              mode: "id",
-              id: selectedVoiceInfo.voiceId,
-            },
-            output_format: {
-              container: "mp3",
-              bit_rate: 128000,
-              sample_rate: 44100,
-            },
-            language: "fr",
-          }),
-        });
-      } else if (selectedVoiceInfo.api === "azure") {
-        // API Azure
-        console.log("Appel API Azure avec voiceId:", selectedVoiceInfo.voiceId);
-        response = await fetch(
-          "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
-          {
+
+        let response;
+        let audioSource = ""; // Définir la source audio
+        // Appeler l'API selon le type de voix sélectionnée
+        if (selectedVoiceInfo.api === "cartesia") {
+          // API Cartesia (code existant)
+          audioSource = "cartesia";
+
+          response = await fetch("https://api.cartesia.ai/tts/bytes", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Cartesia-Version": "2024-06-10",
+              "X-API-Key": import.meta.env.VITE_SYNTHESIA,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({
-              text: text,
-              voice: selectedVoiceInfo.voiceId,
+              model_id: "sonic-2",
+              transcript: sentence,
+              voice: {
+                mode: "id",
+                id: selectedVoiceInfo.voiceId,
+              },
+              output_format: {
+                container: "mp3",
+                bit_rate: 128000,
+                sample_rate: 44100,
+              },
+              language: "fr",
             }),
-          }
-        );
-      } else {
-        throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
+          });
+        } else if (selectedVoiceInfo.api === "azure") {
+          // API Azure (code existant)
+          audioSource = "azure";
+
+          response = await fetch(
+            "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: sentence,
+                voice: selectedVoiceInfo.voiceId,
+              }),
+            }
+          );
+        } else {
+          throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            `Erreur HTTP: ${response.status} - ${response.statusText}`
+          );
+        }
+
+        setIsLoadingResponse(false);
+
+        // Convertir la réponse en blob audio
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        // Ajouter l'URL à la liste des audios générés
+        setAudioUrls((prev) => [...prev, audioUrl]);
+
+        // Ajouter à la file d'attente
+        // audioQueueRef.current.push({ text: sentence, url: audioUrl });
+        audioQueueRef.current.push({
+          text: sentence,
+          url: audioUrl,
+          source: audioSource,
+        });
+
+        setAudioQueue([...audioQueueRef.current]);
+        console.log("AudioManager: Ajout à la file d'attente", {
+          text: sentence,
+          url: audioUrl,
+        });
+
+        // Si c'est le premier élément et qu'aucun audio n'est en cours, démarrer la lecture
+        if (i === 0 && !AudioManager.isPlaying) {
+          processAudioQueue();
+        }
+
+        // Si interruption détectée, arrêter
+        if (interruptionDetected) {
+          console.log(
+            "🛑 Interruption détectée - arrêt du traitement des phrases"
+          );
+          break;
+        }
       }
 
-      // Vérifier si la réponse est OK
-      if (!response.ok) {
-        throw new Error(
-          `Erreur HTTP: ${response.status} - ${response.statusText}`
-        );
-      }
-      setIsLoadingResponse(false);
-
-      // Convertir la réponse en blob audio
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      // Ajouter l'URL à la liste des audios générés
-      setAudioUrls((prev) => [...prev, audioUrl]);
-
-      // Utiliser le gestionnaire audio pour lire l'audio
-      AudioManager.play(audioUrl, playbackRate);
-
-      // Mettre en place une surveillance des interruptions
+      // Surveillance des interruptions
       let interruptionCheckInterval = setInterval(() => {
         if (interruptionDetected) {
           console.log("🛑 Interruption détectée - arrêt immédiat de l'audio");
@@ -1036,7 +1195,7 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
       }, 100);
     } catch (error) {
       console.error("Erreur lors de la génération ou lecture du TTS:", error);
-      AudioManager.cleanup();
+      AudioManager.stopCurrent();
     }
   };
 
@@ -1092,6 +1251,10 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
   const stopEverything = () => {
     // Arrêter le TTS
     AudioManager.stopAll();
+
+    // Vider la file d'attente audio
+    audioQueueRef.current = [];
+    setAudioQueue([]);
 
     // Arrêter l'écoute du micro
     stopListening();
@@ -1231,6 +1394,11 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
     if (interruptionDetected) {
       console.log("🚨 INTERRUPTION DÉTECTÉE - ARRÊT FORCÉ DE L'AUDIO");
       AudioManager.stopAll();
+
+      // Vider la file d'attente audio
+      audioQueueRef.current = [];
+      setAudioQueue([]);
+
       console.log("✅ Audio forcé à l'arrêt");
     }
   }, [interruptionDetected]);
@@ -1343,6 +1511,17 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
       calibrateMicrophone();
       firstSpeechDetectedRef.current = false;
       speechStabilityCountRef.current = 0;
+      // ... (début du composant)
+
+      // Nouveaux refs pour compter la stabilité de la parole
+      // const speechStabilityCountRef = useRef<number>(0); // L'original
+      // ---- MODIFICATION 1: Ajuster la cible de stabilité ----
+      // Tu peux rendre cette valeur configurable ou la tester avec différentes valeurs.
+      // Pour un test rapide, on peut la mettre à 1 ou 2.
+      const SPEECH_STABILITY_TARGET = 1; // Par exemple, au lieu de 3 implicitement avant
+
+      // ... (autres états et refs)
+
       vuWorkletRef.current.port.onmessage = (ev: MessageEvent) => {
         const rawVolume = ev.data.volume;
         if (isCalibrating) {
@@ -1353,19 +1532,13 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
         setVolume(smoothedVolume);
         if (onVolumeChange) onVolumeChange(smoothedVolume);
 
-        // Appel à la fonction de détection d'interruption
-        detectInterruption(smoothedVolume);
+        detectInterruption(smoothedVolume); // Laisser cette logique telle quelle pour l'instant
 
-        // Le reste de la logique de détection de parole
         if (analyserRef.current && frequencyDataRef.current) {
           analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
-
-          // Amélioration de l'analyse des fréquences
           const voiceFrequencyData = Array.from(
             frequencyDataRef.current.slice(3, 25)
           );
-
-          // Ajouter une analyse plus sophistiquée des fréquences
           const avgFrequency =
             voiceFrequencyData.reduce((sum, val) => sum + val, 0) /
             voiceFrequencyData.length;
@@ -1375,8 +1548,6 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
               0
             ) / voiceFrequencyData.length
           );
-
-          // Une voix humaine a généralement une distribution de fréquences plus variée qu'un bruit constant
           const hasVoiceFrequency =
             voiceFrequencyData.some((val) => val > 80) && stdDevFrequency > 15;
 
@@ -1386,9 +1557,8 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
           }
           const now = Date.now();
 
-          // Si le TTS est en cours, ne pas démarrer d'enregistrement
           if (
-            !isTTSAudioPlayingRef.current &&
+            !isTTSAudioPlayingRef.current && // Important: Ne pas détecter si le TTS parle
             smoothedVolume > currentThreshold &&
             hasVoiceFrequency
           ) {
@@ -1405,76 +1575,157 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
               clearTimeout(silenceAlertTimerRef.current);
               silenceAlertTimerRef.current = null;
             }
+
             if (!isSpeaking) {
+              // Si on ne parle pas déjà
               if (!speechStartTimeRef.current) {
                 speechStartTimeRef.current = now;
+                console.log(
+                  now,
+                  "Détection initiale de son au-dessus du seuil"
+                );
               } else if (now - speechStartTimeRef.current > minSpeechDuration) {
+                // ---- MODIFICATION 2: Ajuster le délai de validation ----
+                // L'original était 150ms (si firstSpeechDetected) ou 200ms.
+                // Essayons des valeurs plus basses. Tu peux aussi les rendre configurables.
                 const validationDelay = firstSpeechDetectedRef.current
-                  ? 150
-                  : 200;
+                  ? 50
+                  : 80; // ms
+                // const validationDelay = firstSpeechDetectedRef.current ? 150 : 200; // Original
 
                 if (!speechValidationRef.current) {
-                  // Ajouter un compteur de stabilité
+                  // Gérer speechStabilityCountRef
                   if (!speechStabilityCountRef.current)
                     speechStabilityCountRef.current = 0;
                   speechStabilityCountRef.current++;
+                  console.log(
+                    now,
+                    "Compteur de stabilité de parole:",
+                    speechStabilityCountRef.current
+                  );
 
-                  // Ne valider que si la parole est stable pendant plusieurs échantillons
-                  if (speechStabilityCountRef.current >= 3) {
+                  // ---- MODIFICATION 3: Condition de stabilité ----
+                  // if (speechStabilityCountRef.current >= 3) { // Original
+                  if (
+                    speechStabilityCountRef.current >= SPEECH_STABILITY_TARGET
+                  ) {
+                    console.log(
+                      now,
+                      `Stabilité atteinte (${speechStabilityCountRef.current}), lancement du timer de validation de ${validationDelay}ms`
+                    );
                     speechValidationRef.current = window.setTimeout(() => {
+                      console.log(
+                        Date.now(),
+                        "Validation de parole terminée (après timeout)"
+                      );
                       setIsSpeaking(true);
                       setSpeechBooleanState(1);
                       hasSpokeRef.current = true;
-                      firstSpeechDetectedRef.current = true;
-                      if (!isRecordingRef.current && streamRef.current) {
+                      firstSpeechDetectedRef.current = true; // Marquer que la première parole a été détectée
+
+                      // Vérifier si le stream est toujours actif avant de démarrer l'enregistrement
+                      const hasActiveStream =
+                        streamRef.current &&
+                        streamRef.current
+                          .getTracks()
+                          .some((track) => track.readyState === "live");
+
+                      if (!isRecordingRef.current && hasActiveStream) {
+                        console.log(
+                          Date.now(),
+                          "Démarrage de l'enregistrement..."
+                        );
                         startRecording();
+                      } else if (!hasActiveStream) {
+                        console.warn(
+                          Date.now(),
+                          "Tentative de démarrage de l'enregistrement, mais le stream n'est pas actif."
+                        );
+                        // Peut-être essayer de redémarrer le stream ici si nécessaire
                       }
+
                       if (onSpeechStart) onSpeechStart();
-                      speechValidationRef.current = null;
-                      speechStabilityCountRef.current = 0;
+                      speechValidationRef.current = null; // Important: Réinitialiser pour la prochaine détection
+                      speechStabilityCountRef.current = 0; // Réinitialiser le compteur de stabilité
+                      console.log(
+                        Date.now(),
+                        "État isSpeaking: true, Enregistrement démarré (si applicable)"
+                      );
                     }, validationDelay);
                   }
                 }
               }
             }
           } else {
+            // Volume sous le seuil OU TTS en cours de lecture OU pas de fréquence vocale
+            // Si le volume retombe SOUS le seuil PENDANT la phase de validation de la parole
+            // (c-à-d avant que le setTimeout de speechValidationRef ne se déclenche)
             if (speechValidationRef.current) {
+              console.log(
+                Date.now(),
+                "Volume retombé sous le seuil PENDANT la validation - Annulation de la validation."
+              );
               clearTimeout(speechValidationRef.current);
               speechValidationRef.current = null;
+              speechStabilityCountRef.current = 0; // Réinitialiser aussi ici
+              // Ne pas réinitialiser speechStartTimeRef.current ici, car on pourrait avoir de brèves pauses
             }
+
+            // Logique de gestion du silence et arrêt de l'enregistrement (globalement OK, mais on ajuste le graceTimeout)
             silenceCountRef.current += 1;
 
-            // Utiliser un seuil adaptatif basé sur la durée de parole
-            const silenceThreshold = firstSpeechDetectedRef.current
+            const dynamicSilenceThreshold = firstSpeechDetectedRef.current
               ? Math.max(
-                  20,
-                  40 -
+                  15, // Réduit de 20
+                  30 - // Réduit de 40
                     Math.min(
-                      20,
+                      15, // Réduit de 20
                       Math.floor(
                         (now - (speechStartTimeRef.current || now)) / 1000
                       )
                     )
                 )
-              : 50;
+              : 40; // Réduit de 50
 
             if (
-              speechBooleanStateRef.current === 1 &&
-              silenceCountRef.current > silenceThreshold
+              speechBooleanStateRef.current === 1 && // Si on était en train de parler
+              silenceCountRef.current > dynamicSilenceThreshold // Et qu'un silence suffisant est détecté
             ) {
               if (!graceTimeoutRef.current) {
+                console.log(
+                  Date.now(),
+                  `Détection de silence prolongé (compteur: ${silenceCountRef.current}), lancement du graceTimeout`
+                );
                 graceTimeoutRef.current = window.setTimeout(() => {
+                  console.log(
+                    Date.now(),
+                    "Grace timeout terminé. Arrêt de l'enregistrement."
+                  );
                   if (isRecordingRef.current) {
                     stopRecording();
                   }
+                  // Réinitialiser les états liés à la parole active
+                  setIsSpeaking(false); //
+                  setSpeechBooleanState(0); //
+                  hasSpokeRef.current = false; //
+                  speechStartTimeRef.current = null; //
+                  // firstSpeechDetectedRef.current reste true
+
                   silenceCountRef.current = 0;
                   graceTimeoutRef.current = null;
-                }, 300); // Réduit de 500ms à 300ms
+
+                  // Logique onSpeechEnd (déjà présente dans un useEffect séparé, mais pour le log)
+                  // if (hasSpokeRef.current) { // Ce `hasSpokeRef` serait toujours `false` ici après la réinitialisation
+                  //   if (onSpeechEnd) onSpeechEnd();
+                  // }
+                }, 200); // Réduit de 300ms à 200ms pour le graceTimeout
               }
             }
           }
         }
       };
+
+      // ... (fin du composant)
       setIsListening(true);
     } catch (error) {
       console.error("Erreur lors de l'accès au microphone:", error);
@@ -1697,7 +1948,7 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
                   {isTTSPlaying ? (
                     <video
                       key="speaking-video"
-                      src="/video2.mp4"
+                      src="/raelparle.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -1707,7 +1958,7 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
                   ) : (
                     <video
                       key="idle-video"
-                      src="/video1.mp4"
+                      src="/rael.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -2168,4 +2419,4 @@ const detectionFinal4: React.FC<SpeechDetectorProps> = ({
   );
 };
 
-export default detectionFinal4;
+export default DetectionFinal4;

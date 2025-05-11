@@ -41,7 +41,7 @@ interface TranscriptionResult {
   text: string;
 }
 
-const detectionFinal2: React.FC<SpeechDetectorProps> = ({
+const DetectionFinal2: React.FC<SpeechDetectorProps> = ({
   onSpeechStart,
   onSpeechEnd,
   onVolumeChange,
@@ -79,10 +79,12 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
     useState(false);
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
   const [backgroundVolume, setBackgroundVolume] = useState(0.2); // 0.0 à 1.0
-  const SYSTEM_PROMPT = `adopte le roel d'agent conversationel expert en tout , tu peux changer le role si remi te le demande.
-
-À chaque message, tu t'exprimes en moins de 80 mots , chaleureuses et encourageantes, qui réchauffent le cœur`;
-
+  const SYSTEM_PROMPT = `Adopte le rôle d'Emmanuel Macron président de la France et des Français Tu réponds comme si tu étais le président je suis Rémi et je vais te parler tu adoptes un ton très conversationnel Nous allons discuter ensembleet soit très sympathique`;
+  const [audioQueue, setAudioQueue] = useState<{ text: string; url: string }[]>(
+    []
+  );
+  const [isProcessingQueue, setIsProcessingQueue] = useState<boolean>(false);
+  const audioQueueRef = useRef<{ text: string; url: string }[]>([]);
   //@ts-ignore
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -162,6 +164,12 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
       voiceId: "dc171287-77a6-49b4-b1a5-1c41360fb688",
     },
     {
+      id: "7a87c6e4-5c33-4e0b-a53c-5ffd70c69231",
+      name: "macron",
+      api: "cartesia",
+      voiceId: "7a87c6e4-5c33-4e0b-a53c-5ffd70c69231",
+    },
+    {
       id: "0b1380da-611b-4d00-83f4-8a969a53e4e0",
       name: "helene",
       api: "cartesia",
@@ -225,10 +233,11 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
   // AudioManager pour garantir un seul audio à la fois
   const AudioManager = {
     currentAudio: null as HTMLAudioElement | null,
+    isPlaying: false,
 
     play: function (url: string, playbackRate: number = 1.0) {
       // Si un audio est en cours, on l'arrête d'abord
-      this.stopAll();
+      this.stopCurrent();
 
       // Créer le nouvel élément audio
       const audio = new Audio(url);
@@ -237,6 +246,7 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
       // Stocker la référence
       this.currentAudio = audio;
       window.currentPlayingAudio = audio;
+      this.isPlaying = true;
 
       // Configurer les événements
       audio.onplay = () => {
@@ -247,35 +257,51 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
 
       audio.onended = () => {
         console.log("AudioManager: Lecture terminée");
-        this.cleanup();
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
         URL.revokeObjectURL(url);
+
+        // Notifier la fin de la lecture pour gérer la file d'attente
+        processAudioQueue();
       };
 
       audio.onerror = (e) => {
         console.error("AudioManager: Erreur de lecture", e);
-        this.cleanup();
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
         URL.revokeObjectURL(url);
+
+        // Notifier l'erreur pour gérer la file d'attente
+        processAudioQueue();
       };
 
       // Lancer la lecture
       audio.play().catch((err) => {
         console.error("AudioManager: Impossible de démarrer la lecture", err);
-        this.cleanup();
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
+
+        // Notifier l'erreur pour gérer la file d'attente
+        processAudioQueue();
       });
 
       return audio;
     },
 
-    stopAll: function () {
-      console.log("AudioManager: Arrêt de tous les audios");
-
-      // Arrêter l'audio courant s'il existe
+    stopCurrent: function () {
       if (this.currentAudio) {
         try {
           this.currentAudio.pause();
           this.currentAudio.currentTime = 0;
-
-          // Revoke URL si c'est un Blob URL
           if (
             this.currentAudio.src &&
             this.currentAudio.src.startsWith("blob:")
@@ -285,10 +311,21 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
         } catch (e) {
           console.error("AudioManager: Erreur lors de l'arrêt", e);
         }
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
       }
+      setIsTTSPlaying(false);
+      isTTSAudioPlayingRef.current = false;
+      this.isPlaying = false;
+    },
 
-      // Nettoyer toutes les références
-      this.cleanup();
+    stopAll: function () {
+      console.log("AudioManager: Arrêt de tous les audios");
+      this.stopCurrent();
+
+      // Vider la file d'attente
+      audioQueueRef.current = [];
+      setAudioQueue([]);
 
       // Parcourir le DOM et arrêter tout autre audio en cours
       document.querySelectorAll("audio").forEach((audioElement) => {
@@ -303,15 +340,93 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
         }
       });
     },
-
-    cleanup: function () {
-      // Réinitialiser toutes les références et variables d'état
-      this.currentAudio = null;
-      window.currentPlayingAudio = null;
-      setIsTTSPlaying(false);
-      isTTSAudioPlayingRef.current = false;
-    },
   };
+
+  const processAudioQueue = () => {
+    console.log("processAudioQueue: Traitement de la file d'attente");
+
+    // Si interruption ou file vide, ne rien faire
+    if (interruptionDetected || audioQueueRef.current.length === 0) {
+      console.log("Fin de traitement: interruption ou file vide");
+      return;
+    }
+
+    // Si un audio est déjà en lecture, ne rien faire
+    if (AudioManager.isPlaying) {
+      console.log("Un audio est déjà en lecture");
+      return;
+    }
+
+    // Prendre le premier élément de la file
+    const nextAudio = audioQueueRef.current.shift();
+    setAudioQueue([...audioQueueRef.current]);
+
+    if (nextAudio) {
+      console.log("Lecture du prochain élément:", nextAudio.text);
+
+      // Délai différent selon la source
+      const delay = nextAudio.source === "cartesia" ? 300 : 50;
+
+      setTimeout(() => {
+        if (!interruptionDetected) {
+          // Si l'élément vient de Cartesia, utiliser un traitement spécial
+          if (nextAudio.source === "cartesia") {
+            // Créer un nouvel élément audio avec plus de contrôle
+            const audio = new Audio(nextAudio.url);
+            audio.playbackRate = playbackRate;
+
+            // Forcer la lecture en mode bloc pour Cartesia
+            audio.preload = "auto";
+
+            // S'assurer que l'événement onended se déclenche
+            audio.addEventListener("ended", () => {
+              console.log("Audio Cartesia terminé via addEventListener");
+              URL.revokeObjectURL(nextAudio.url);
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+
+              // Attendre un peu plus longtemps avant de passer au suivant
+              setTimeout(processAudioQueue, 100);
+            });
+
+            // En cas d'erreur, passer au suivant aussi
+            audio.addEventListener("error", () => {
+              console.error("Erreur de lecture Cartesia");
+              URL.revokeObjectURL(nextAudio.url);
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+
+              setTimeout(processAudioQueue, 100);
+            });
+
+            // Marquer comme en cours de lecture
+            AudioManager.isPlaying = true;
+            setIsTTSPlaying(true);
+            isTTSAudioPlayingRef.current = true;
+            window.currentPlayingAudio = audio;
+
+            // Lancer la lecture
+            audio.play().catch((err) => {
+              console.error(
+                "Erreur lors du démarrage de l'audio Cartesia:",
+                err
+              );
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+              setTimeout(processAudioQueue, 100);
+            });
+          } else {
+            // Utiliser l'AudioManager normal pour les autres sources
+            AudioManager.play(nextAudio.url, playbackRate);
+          }
+        }
+      }, delay);
+    }
+  };
+
   useEffect(() => {
     if (speechBooleanState === 1) {
       if (!silenceTimerRef.current) {
@@ -481,6 +596,7 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
         AudioManager.stopAll();
         setInterruptionDetected(true);
         setInterruptionCount((prev) => prev + 1);
+
         highVolumeSamplesRef.current = 0;
         lastHighVolumeTimeRef.current = null;
         return;
@@ -926,8 +1042,13 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
       AudioManager.stopAll();
       stopTTS();
       stopEverything();
+
+      // Vider la file d'attente audio
+      audioQueueRef.current = [];
+      setAudioQueue([]);
     }
   };
+
   const speakResponse = async (text: string) => {
     // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
@@ -939,11 +1060,16 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
     setInterruptionDetected(false);
     lastSpeechTimeRef.current = null;
 
+    // Diviser le texte en phrases
+    const sentences = text
+      .split(/(?<=[.!?])\s+/) // Découpe aux ponctuations suivies d'un espace
+      .filter((sentence) => sentence.trim().length > 0) // Enlever les phrases vides
+      .map((sentence) => sentence.trim());
+
+    console.log("Phrases à synthétiser:", sentences);
+
     // Récupérer la voix actuellement sélectionnée
     const currentSelectedVoice = selectedVoice;
-    console.log("Synthèse vocale avec voix ID:", currentSelectedVoice);
-
-    // Trouver les informations de la voix sélectionnée
     const selectedVoiceInfo = availableVoices.find(
       (voice) => voice.id === currentSelectedVoice
     );
@@ -955,79 +1081,110 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
       return;
     }
 
-    console.log(
-      `Utilisation de la voix: ${selectedVoiceInfo.name} (${selectedVoiceInfo.api})`
-    );
-
     try {
-      let response;
+      // Traiter chaque phrase
+      for (let i = 0; i < sentences.length; i++) {
+        const sentence = sentences[i];
 
-      // Appeler l'API appropriée selon le type de voix sélectionnée
-      if (selectedVoiceInfo.api === "cartesia") {
-        // API Cartesia
+        // Ignorer les phrases trop courtes
+        if (sentence.length < 2) continue;
+
         console.log(
-          "Appel API Cartesia avec voiceId:",
-          selectedVoiceInfo.voiceId
+          `Synthèse de la phrase ${i + 1}/${sentences.length}: "${sentence}"`
         );
-        response = await fetch("https://api.cartesia.ai/tts/bytes", {
-          method: "POST",
-          headers: {
-            "Cartesia-Version": "2024-06-10",
-            "X-API-Key": import.meta.env.VITE_SYNTHESIA,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model_id: "sonic-2",
-            transcript: text,
-            voice: {
-              mode: "id",
-              id: selectedVoiceInfo.voiceId,
-            },
-            output_format: {
-              container: "mp3",
-              bit_rate: 128000,
-              sample_rate: 44100,
-            },
-            language: "fr",
-          }),
-        });
-      } else if (selectedVoiceInfo.api === "azure") {
-        // API Azure
-        console.log("Appel API Azure avec voiceId:", selectedVoiceInfo.voiceId);
-        response = await fetch(
-          "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
-          {
+
+        let response;
+        let audioSource = ""; // Définir la source audio
+        // Appeler l'API selon le type de voix sélectionnée
+        if (selectedVoiceInfo.api === "cartesia") {
+          // API Cartesia (code existant)
+          audioSource = "cartesia";
+
+          response = await fetch("https://api.cartesia.ai/tts/bytes", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Cartesia-Version": "2024-06-10",
+              "X-API-Key": import.meta.env.VITE_SYNTHESIA,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({
-              text: text,
-              voice: selectedVoiceInfo.voiceId,
+              model_id: "sonic-2",
+              transcript: sentence,
+              voice: {
+                mode: "id",
+                id: selectedVoiceInfo.voiceId,
+              },
+              output_format: {
+                container: "mp3",
+                bit_rate: 128000,
+                sample_rate: 44100,
+              },
+              language: "fr",
             }),
-          }
-        );
-      } else {
-        throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
+          });
+        } else if (selectedVoiceInfo.api === "azure") {
+          // API Azure (code existant)
+          audioSource = "azure";
+
+          response = await fetch(
+            "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: sentence,
+                voice: selectedVoiceInfo.voiceId,
+              }),
+            }
+          );
+        } else {
+          throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            `Erreur HTTP: ${response.status} - ${response.statusText}`
+          );
+        }
+
+        setIsLoadingResponse(false);
+
+        // Convertir la réponse en blob audio
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        // Ajouter l'URL à la liste des audios générés
+        setAudioUrls((prev) => [...prev, audioUrl]);
+
+        // Ajouter à la file d'attente
+        // audioQueueRef.current.push({ text: sentence, url: audioUrl });
+        audioQueueRef.current.push({
+          text: sentence,
+          url: audioUrl,
+          source: audioSource,
+        });
+
+        setAudioQueue([...audioQueueRef.current]);
+        console.log("AudioManager: Ajout à la file d'attente", {
+          text: sentence,
+          url: audioUrl,
+        });
+
+        // Si c'est le premier élément et qu'aucun audio n'est en cours, démarrer la lecture
+        if (i === 0 && !AudioManager.isPlaying) {
+          processAudioQueue();
+        }
+
+        // Si interruption détectée, arrêter
+        if (interruptionDetected) {
+          console.log(
+            "🛑 Interruption détectée - arrêt du traitement des phrases"
+          );
+          break;
+        }
       }
 
-      // Vérifier si la réponse est OK
-      if (!response.ok) {
-        throw new Error(
-          `Erreur HTTP: ${response.status} - ${response.statusText}`
-        );
-      }
-      setIsLoadingResponse(false);
-
-      // Convertir la réponse en blob audio
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      // Ajouter l'URL à la liste des audios générés
-      setAudioUrls((prev) => [...prev, audioUrl]);
-
-      // Utiliser le gestionnaire audio pour lire l'audio
-      AudioManager.play(audioUrl, playbackRate);
-
-      // Mettre en place une surveillance des interruptions
+      // Surveillance des interruptions
       let interruptionCheckInterval = setInterval(() => {
         if (interruptionDetected) {
           console.log("🛑 Interruption détectée - arrêt immédiat de l'audio");
@@ -1037,7 +1194,7 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
       }, 100);
     } catch (error) {
       console.error("Erreur lors de la génération ou lecture du TTS:", error);
-      AudioManager.cleanup();
+      AudioManager.stopCurrent();
     }
   };
 
@@ -1093,6 +1250,10 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
   const stopEverything = () => {
     // Arrêter le TTS
     AudioManager.stopAll();
+
+    // Vider la file d'attente audio
+    audioQueueRef.current = [];
+    setAudioQueue([]);
 
     // Arrêter l'écoute du micro
     stopListening();
@@ -1232,6 +1393,11 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
     if (interruptionDetected) {
       console.log("🚨 INTERRUPTION DÉTECTÉE - ARRÊT FORCÉ DE L'AUDIO");
       AudioManager.stopAll();
+
+      // Vider la file d'attente audio
+      audioQueueRef.current = [];
+      setAudioQueue([]);
+
       console.log("✅ Audio forcé à l'arrêt");
     }
   }, [interruptionDetected]);
@@ -1781,7 +1947,7 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
                   {isTTSPlaying ? (
                     <video
                       key="speaking-video"
-                      src="/video2.mp4"
+                      src="/robot2.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -1791,7 +1957,7 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
                   ) : (
                     <video
                       key="idle-video"
-                      src="/video1.mp4"
+                      src="/robot1.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -2252,4 +2418,4 @@ const detectionFinal2: React.FC<SpeechDetectorProps> = ({
   );
 };
 
-export default detectionFinal2;
+export default DetectionFinal2;
