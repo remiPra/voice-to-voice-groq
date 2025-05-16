@@ -10,7 +10,7 @@ declare global {
 import { audioContext } from "../../lib/utils/audio-context";
 import VolMeterWorket from "../../lib/worklets/vol-meter";
 import Navbar from "../NavBarSimple";
-import { FaMicrophone } from "react-icons/fa";
+import { FaCog, FaMicrophone, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import { BiMicrophoneOff } from "react-icons/bi";
 
 interface SpeechDetectorProps {
@@ -1809,613 +1809,569 @@ const DetectionFinal4: React.FC<SpeechDetectorProps> = ({
 
   return (
     <>
-      <div className="flex h-screen bg-[#f5f7fa] overflow-hidden relative font-['Poppins',sans-serif]">
-        {/* Indicateur d'interruption */}
-        {interruptionDetected && (
-          <div className="fixed top-4 right-4 bg-[#e63946] text-white px-4 py-2 rounded-lg shadow-lg animate-pulse z-50">
-            Interruption détectée !
-          </div>
-        )}
+  <div className="flex h-screen bg-gradient-to-br from-gray-900 to-purple-900 overflow-hidden relative font-['Cinzel',serif]">
+    {/* Indicateur d'interruption */}
+    {interruptionDetected && (
+      <div className="fixed top-4 right-4 bg-red-600/90 text-white px-4 py-2 rounded-lg shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-pulse z-50">
+        Interruption détectée !
+      </div>
+    )}
 
-        {/* Contenu principal */}
-        <div className="w-full flex flex-col h-full">
-          <div className="bg-[#0a2463] p-5 shadow-lg">
-            <div className="flex justify-between items-center">
-              <h1 className="hidden md:block text-2xl font-['Montserrat',sans-serif] font-bold text-white tracking-tight">
-                <span className="text-[#ff9000]">Chat</span>Assistante
-              </h1>
-              <Navbar />
-
-              <div className="flex space-x-3">
-                <button
-                  className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
-                  onClick={() => {
-                    const panel = document.getElementById("techPanel");
-                    if (panel) {
-                      panel.classList.toggle("translate-x-full");
-                      panel.classList.toggle("translate-x-0");
-                    }
-                  }}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-6 w-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                </button>
-                <div className="mt-3 flex justify-center">
-                  <button
-                    onClick={() =>
-                      setDisplayMode((prev) =>
-                        prev === "text" ? "video" : "text"
-                      )
-                    }
-                    className="bg-[#1e3a8a] text-white px-4 py-1.5 rounded-md hover:bg-[#2a4494] transition-all duration-300 shadow-md text-sm font-medium"
-                  >
-                    {displayMode === "text" ? "Voir vidéo" : "Voir messages"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {displayMode === "text" ? (
-            <div
-              className="flex-grow overflow-y-auto p-6 bg-[#f5f7fa]"
-              style={{
-                scrollBehavior: "smooth",
-                backgroundImage:
-                  "url('https://www.transparenttextures.com/patterns/cubes.png')",
+    {/* Contenu principal */}
+    <div className="w-full flex flex-col h-full">
+      {/* Header modernisé avec thème violet */}
+      <div className="bg-gradient-to-r from-violet-900 via-purple-800 to-indigo-900 p-5 shadow-lg border-b border-violet-500/50">
+        <div className="flex justify-between items-center">
+          <h1 className="hidden md:block text-2xl font-bold text-violet-100 tracking-wider">
+            <span className="text-violet-300">Raël</span>
+            <span className="text-purple-200 text-sm ml-2 italic">Messager des Élohim</span>
+          </h1>
+          
+          <div className="flex space-x-3">
+            <button
+              className="bg-violet-800/80 text-violet-200 p-2.5 rounded-full shadow-lg hover:bg-violet-700 transition-all duration-300 border border-violet-500/50"
+              onClick={() => {
+                const panel = document.getElementById("techPanel");
+                if (panel) {
+                  panel.classList.toggle("translate-x-full");
+                  panel.classList.toggle("translate-x-0");
+                }
               }}
             >
-              {error && (
-                <div className="p-4 mb-4 bg-[#e63946] text-white rounded-lg border border-red-600 shadow-lg">
-                  {error}
-                </div>
-              )}
-              {messages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={`p-5 my-3 rounded-2xl max-w-[80%] shadow-md transition-all duration-300 hover:shadow-lg ${
-                    msg.role === "user"
-                      ? "bg-[#0a2463] text-white ml-auto"
-                      : "bg-white border border-gray-200 text-[#0a2463]"
-                  }`}
-                  style={{
-                    position: "relative",
-                    ...(msg.role !== "user" && {
-                      "&:before": {
-                        content: '""',
-                        position: "absolute",
-                        top: "20px",
-                        left: "-10px",
-                        border: "10px solid transparent",
-                        borderRight: "10px solid white",
-                      },
-                    }),
-                    ...(msg.role === "user" && {
-                      "&:before": {
-                        content: '""',
-                        position: "absolute",
-                        top: "20px",
-                        right: "-10px",
-                        border: "10px solid transparent",
-                        borderLeft: "10px solid #0a2463",
-                      },
-                    }),
-                  }}
-                >
-                  <div className="flex justify-between mb-2">
-                    <span
-                      className={`text-xs font-bold ${
-                        msg.role === "user"
-                          ? "text-[#ff9000]"
-                          : "text-[#1e3a8a]"
-                      }`}
-                    >
-                      {msg.role === "user" ? "Vous" : "Assistant"}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {msg.timestamp}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">
-                    {msg.content}
-                  </p>
-                </div>
-              ))}
-              <div ref={messagesEndRef}></div>
-            </div>
-          ) : (
-            <div className="flex-grow relative overflow-hidden">
-              <div className="absolute lg:max-w-[450px] inset-0 w-full h-full">
-                <div className="relative w-full h-full">
-                  {isTTSPlaying ? (
-                    <video
-                      key="speaking-video"
-                      src="/raelparle.mp4"
-                      className="w-full h-full object-cover"
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                    />
-                  ) : (
-                    <video
-                      key="idle-video"
-                      src="/rael.mp4"
-                      className="w-full h-full object-cover"
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                    />
-                  )}
-                  <div className="absolute bottom-2 w-full flex justify-center">
-                    <button
-                      onClick={toggleManualRecording}
-                      className={`px-5 w-20 h-20 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
-                        isManualRecording
-                          ? "bg-[#e63946]  text-white shadow-lg"
-                          : "bg-[#ff9000]  text-white shadow-lg"
-                      }`}
-                    >
-                      {isManualRecording ? "■" : "●"}
-                    </button>
-                    <button
-                      onClick={toggleListening}
-                      className={`px-5 py-2.5 w-20 h-20 ml-5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
-                        isListening
-                          ? "bg-[#e63946] text-white shadow-lg"
-                          : "bg-[#3d9970] text-white shadow-lg"
-                      }`}
-                    >
-                      {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {/* Après les messages */}
-          {isLoadingResponse && (
-            <div className="w-full h-full fixed z-[55] top-0 left-0 rounded-2xl bg-white border border-gray-200 text-[#0a2463] ">
-              <div className="flex items-center space-x-2">
-                <div
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "600ms" }}
-                ></div>
-                <span className="text-sm text-gray-500 ml-2">
-                  Raël réfléchit...
-                </span>
-              </div>
-            </div>
-          )}
-          <form
-            onSubmit={handleTextSubmit}
-            className="bg-white border-t border-gray-200 p-4 shadow-md"
-          >
-            <div className="flex items-center">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => {
-                  // Sauvegarde l'état actuel avant de modifier l'input
-                  const audioWasPlaying = isTTSAudioPlayingRef.current;
-
-                  // Mettre à jour l'input
-                  setInputText(e.target.value);
-
-                  // Si un audio était en cours de lecture, l'arrêter immédiatement
-                  if (audioWasPlaying) {
-                    console.log(
-                      "🖋️ Saisie détectée - Arrêt de l'audio en cours"
-                    );
-
-                    // Approche directe comme dans votre code d'interruption vocale
-                    if (window.currentPlayingAudio) {
-                      // Approche 1: Méthode standard
-                      window.currentPlayingAudio.pause();
-                      window.currentPlayingAudio.currentTime = 0;
-
-                      // Approche 2: Vider la source
-                      window.currentPlayingAudio.src = "";
-
-                      // Mettre à jour les états
-                      isTTSAudioPlayingRef.current = false;
-                      setIsTTSPlaying(false);
-
-                      // Puis appel à AudioManager pour nettoyer
-                      AudioManager.stopAll();
-
-                      console.log("✅ Audio forcé à l'arrêt via input");
-                    }
-                  }
-                }}
-                placeholder="Écrivez votre message..."
-                className="flex-grow px-5 py-3 bg-[#f5f7fa] border border-gray-300 rounded-l-full text-[#0a2463] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-transparent"
-                disabled={processing.current}
-              />
-              <button
-                type="submit"
-                className="bg-[#0a2463] hover:bg-[#1e3a8a] text-white px-6 py-3 rounded-r-full transition-all duration-300 shadow-md"
-                disabled={processing.current || !inputText.trim()}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+            </button>
+            <div className="mt-3 flex justify-center">
+              <button
+                onClick={() =>
+                  setDisplayMode((prev) =>
+                    prev === "text" ? "video" : "text"
+                  )
+                }
+                className="bg-violet-800/80 text-violet-100 px-4 py-1.5 rounded-md hover:bg-violet-700 transition-all duration-300 shadow-md text-sm font-medium border border-violet-500/50"
+              >
+                {displayMode === "text" ? "Voir vidéo" : "Voir messages"}
               </button>
             </div>
-          </form>
+          </div>
+        </div>
+      </div>
 
-          <div className="fixed top-0 right-0 h-full">
+      {displayMode === "text" ? (
+        <div
+          className="flex-grow overflow-y-auto p-6 bg-gradient-to-br from-purple-900/90 to-gray-900"
+          style={{
+            scrollBehavior: "smooth",
+            backgroundImage: "url('https://www.transparenttextures.com/patterns/star-sky.png')",
+            backgroundBlendMode: "overlay",
+          }}
+        >
+          {error && (
+            <div className="p-4 mb-4 bg-red-600/80 text-white rounded-lg border border-red-400 shadow-lg">
+              {error}
+            </div>
+          )}
+          {messages.map((msg, index) => (
             <div
-              id="techPanel"
-              className="w-full md:w-96 h-full bg-white border-l border-gray-200 shadow-2xl overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
+              key={index}
+              className={`p-5 my-4 rounded-2xl max-w-[80%] shadow-xl transition-all duration-300 hover:shadow-[0_5px_20px_rgba(124,58,237,0.3)] ${
+                msg.role === "user"
+                  ? "bg-gradient-to-br from-indigo-600 to-violet-700 text-violet-50 ml-auto rounded-tr-none border border-indigo-400/20"
+                  : msg.role === "system" 
+                  ? "hidden"
+                  : "bg-gradient-to-br from-gray-800/90 to-gray-900/90 border border-violet-500/30 text-violet-100 rounded-tl-none"
+              }`}
+              style={{
+                position: "relative",
+                animation: `fadeIn 0.5s ease ${index * 0.1}s backwards`,
+              }}
             >
-              <div className="flex justify-around items-center p-5 bg-[#0a2463] text-white">
-                <h2 className="text-lg font-bold font-['Montserrat',sans-serif]">
-                  Panneau Technique
-                </h2>
-                <div className="flex space-x-3">
-                  <button
-                    className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
-                    onClick={downloadConversation}
-                    title="Télécharger la conversation"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-6 w-6"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                      />
-                    </svg>
-                  </button>
-
-                  {/* Vos autres boutons existants */}
-                </div>
-                <button
-                  onClick={() => {
-                    if (isBackgroundMusicPlaying) {
-                      pauseBackgroundMusic();
-                    } else {
-                      playBackgroundMusic();
-                    }
-                  }}
-                  className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
-                    isBackgroundMusicPlaying
-                      ? "bg-[#3d9970] text-white shadow-lg"
-                      : "bg-[#0a2463] text-white shadow-lg"
+              <div className="flex justify-between mb-2">
+                <span
+                  className={`text-xs font-bold ${
+                    msg.role === "user"
+                      ? "text-purple-200"
+                      : "text-violet-300"
                   }`}
                 >
-                  {isBackgroundMusicPlaying ? "Pause musique" : "Jouer musique"}
+                  {msg.role === "user" ? "Vous" : "Raël"}
+                </span>
+                <span className="text-xs text-gray-400">
+                  {msg.timestamp}
+                </span>
+              </div>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap tracking-wide">
+                {msg.content}
+              </p>
+            </div>
+          ))}
+          <div ref={messagesEndRef}></div>
+        </div>
+      ) : (
+        <div className="flex-grow relative overflow-hidden">
+          <div className="absolute lg:max-w-[450px] inset-0 w-full h-full">
+            <div className="relative w-full h-full">
+              {isTTSPlaying ? (
+                <video
+                  key="speaking-video"
+                  src="/raelparle.mp4"
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              ) : (
+                <video
+                  key="idle-video"
+                  src="/rael.mp4"
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              )}
+              <div className="absolute bottom-2 w-full flex justify-center">
+                <button
+                  onClick={toggleManualRecording}
+                  className={`px-5 w-20 h-20 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg ${
+                    isManualRecording
+                      ? "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]"
+                      : "bg-gradient-to-r from-violet-700 to-purple-800 text-white shadow-[0_0_10px_rgba(109,40,217,0.3)]"
+                  }`}
+                >
+                  {isManualRecording ? "■" : "●"}
                 </button>
                 <button
-                  className="bg-[#0a2463] text-white p-3 rounded-l-lg shadow-lg hover:bg-[#1e3a8a] transition-all duration-300"
-                  onClick={() => {
-                    const panel = document.getElementById("techPanel");
-                    if (panel) {
-                      panel.classList.toggle("translate-x-full");
-                      panel.classList.toggle("translate-x-0");
-                    }
-                  }}
+                  onClick={toggleListening}
+                  className={`px-5 py-2.5 w-20 h-20 ml-5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg ${
+                    isListening
+                      ? "bg-emerald-600 text-white shadow-[0_0_15px_rgba(5,150,105,0.5)]"
+                      : "bg-gradient-to-r from-violet-700 to-purple-800 text-white shadow-[0_0_10px_rgba(109,40,217,0.3)]"
+                  }`}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-6 w-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="p-5 border-b border-gray-200">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Volume musique de fond :{" "}
-                    {(backgroundVolume * 100).toFixed(0)}%
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={backgroundVolume}
-                    onChange={(e) =>
-                      setBackgroundVolume(Number(e.target.value))
-                    }
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                  Sélection de voix
-                </h3>
-                <div className="space-y-2">
-                  {availableVoices.map((voice) => (
-                    <div key={voice.id} className="flex items-center">
-                      <input
-                        type="radio"
-                        id={voice.id}
-                        name="voice"
-                        value={voice.id}
-                        checked={selectedVoice === voice.id}
-                        onChange={() => setSelectedVoice(voice.id)}
-                        className="mr-2 accent-[#0a2463]"
-                      />
-                      <label
-                        htmlFor={voice.id}
-                        className={`cursor-pointer ${
-                          selectedVoice === voice.id
-                            ? "text-[#0a2463] font-medium"
-                            : "text-gray-600"
-                        }`}
-                      >
-                        {voice.name}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => {
-                    if (selectedVoice && !processing.current) {
-                      speakResponse(
-                        "Ceci est un test de la voix sélectionnée. Comment puis-je vous aider aujourd'hui?"
-                      );
-                    }
-                  }}
-                  className="mt-4 w-full bg-[#0a2463] hover:bg-[#1e3a8a] text-white py-2 px-4 rounded-lg transition-all duration-300 shadow-md"
-                >
-                  Tester la voix
-                </button>
-              </div>
-              <div className="p-5 border-b border-gray-200">
-                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                  Vitesse de la voix
-                </h3>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Vitesse: {playbackRate.toFixed(2)}x
-                  </label>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="1.5"
-                    step="0.05"
-                    value={playbackRate}
-                    onChange={(e) =>
-                      setPlaybackRate(parseFloat(e.target.value))
-                    }
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-              </div>
-              <div className="p-5 border-b border-gray-200">
-                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                  Calibration Microphone
-                </h3>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Seuil de détection: {threshold.toFixed(4)}
-                    {autoThresholdRef.current !== threshold &&
-                      " (Ajusté manuellement)"}
-                  </label>
-                  <input
-                    type="range"
-                    min="0.001"
-                    max="0.1"
-                    step="0.001"
-                    value={threshold}
-                    onChange={handleThresholdChange}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                {isListening && !isCalibrating && (
-                  <button
-                    onClick={calibrateMicrophone}
-                    className="w-full px-4 py-2.5 rounded-md font-medium bg-[#ff9000] hover:bg-[#e67e00] text-white transition-all duration-300 shadow-md"
-                  >
-                    Recalibrer microphone
-                  </button>
-                )}
-                {isCalibrating && (
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                    <div
-                      className="bg-[#ff9000] h-2.5 rounded-full"
-                      style={{ width: `${calibrationProgress}%` }}
-                    ></div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Calibration: {calibrationProgress.toFixed(0)}%
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div className="p-5 border-b border-gray-200">
-                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                  États de détection
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-100 rounded-xl">
-                    <div className="text-xs font-medium mb-2 text-gray-700">
-                      État de parole:
-                    </div>
-                    <div className="flex justify-center">
-                      <span
-                        className={`w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full ${
-                          speechBooleanState === 1
-                            ? "bg-[#3d9970] text-white"
-                            : "bg-gray-300 text-gray-600"
-                        }`}
-                      >
-                        {speechBooleanState}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-gray-100 rounded-xl">
-                    <div className="text-xs font-medium mb-2 text-gray-700">
-                      Fins de parole:
-                    </div>
-                    <div className="flex justify-center">
-                      <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-[#0a2463] text-white">
-                        {speechEndCount}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section pour le compteur d'interruptions */}
-                <div className="mt-4 p-4 bg-gray-100 rounded-xl">
-                  <div className="text-xs font-medium mb-2 text-gray-700">
-                    Nombre d'interruptions:
-                  </div>
-                  <div className="flex justify-center">
-                    <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-[#e63946] text-white">
-                      {interruptionCount}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5 border-b border-gray-200">
-                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                  Transcriptions
-                </h3>
-                {transcriptions.length === 0 ? (
-                  <p className="text-gray-500 italic text-sm">
-                    Aucune transcription pour le moment
-                  </p>
-                ) : (
-                  <div className="space-y-3 max-h-40 overflow-y-auto">
-                    {transcriptions.map((trans) => (
-                      <div
-                        key={trans.id}
-                        className="p-3 bg-gray-100 border border-gray-200 rounded-lg text-sm"
-                      >
-                        <div className="flex justify-between mb-1">
-                          <span className="text-xs font-medium text-[#1e3a8a]">
-                            Transcription
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {trans.timestamp}
-                          </span>
-                        </div>
-                        <p className="text-gray-800">{trans.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="p-5 border-b border-gray-200">
-                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                  Audios générés
-                </h3>
-                {audioUrls.length === 0 ? (
-                  <p className="text-gray-500 italic text-sm">
-                    Aucun audio généré pour le moment
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {audioUrls.map((url, index) => (
-                      <div key={index} className="mb-2">
-                        <audio
-                          src={url}
-                          controls
-                          className="w-full h-10 rounded-lg"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="p-5 border-b border-gray-200">
-                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
-                  Informations de débogage
-                </h3>
-                <div className="text-xs space-y-2 bg-gray-100 p-3 rounded-lg text-gray-700">
-                  <p>Volume actuel: {volume.toFixed(5)}</p>
-                  <p>Seuil actuel: {threshold.toFixed(5)}</p>
-                  <p>
-                    Seuil après première détection:{" "}
-                    {(threshold * 0.8).toFixed(5)}
-                  </p>
-                  <p>
-                    Première parole détectée:{" "}
-                    {firstSpeechDetectedRef.current ? "Oui" : "Non"}
-                  </p>
-                  <p>Durée minimale parole: {minSpeechDuration}ms</p>
-                  <p>Silence avant fin: {silenceTimeout}ms</p>
-                  <p>Seuil d'interruption: {interruptionThreshold}ms</p>
-                  <p>
-                    Interruption actuelle:{" "}
-                    {interruptionDetected ? "Détectée" : "Aucune"}
-                  </p>
-                </div>
-              </div>
-              <div className="p-5">
-                <button
-                  onClick={resetCounters}
-                  className="w-full px-4 py-3 rounded-lg font-medium bg-[#0a2463] hover:bg-[#1e3a8a] text-white transition-all duration-300 shadow-md"
-                >
-                  Réinitialiser les compteurs
+                  {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Indicateur de chargement */}
+      {isLoadingResponse && (
+        <div className="w-full h-full fixed z-[55] top-0 left-0 rounded-2xl bg-gradient-to-r from-gray-900/95 to-purple-900/95 border border-violet-500/50 text-violet-100 flex items-center justify-center">
+          <div className="flex items-center space-x-2">
+            <div
+              className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+              style={{ animationDelay: "0ms" }}
+            ></div>
+            <div
+              className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+              style={{ animationDelay: "300ms" }}
+            ></div>
+            <div
+              className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+              style={{ animationDelay: "600ms" }}
+            ></div>
+            <span className="text-sm text-violet-200 ml-2">
+              Raël réfléchit...
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Zone d'entrée du message */}
+      <form
+        onSubmit={handleTextSubmit}
+        className="bg-gradient-to-r from-purple-900/90 via-violet-900/80 to-purple-900/90 border-t border-violet-500/30 p-4 shadow-lg backdrop-blur-sm"
+      >
+        <div className="flex items-center">
+          <input
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder="Posez une question à Raël..."
+            className="flex-grow px-5 py-3 bg-gray-800/70 border border-violet-500/40 rounded-l-full text-violet-100 placeholder-violet-300/50 focus:outline-none focus:ring-2 focus:ring-violet-500/50 shadow-inner"
+            disabled={processing?.current}
+          />
+          <button
+            type="submit"
+            className="bg-gradient-to-r from-violet-800 to-purple-800 hover:from-violet-700 hover:to-purple-700 text-white px-6 py-3 rounded-r-full transition-all duration-300 shadow-md border border-violet-500/40"
+            disabled={processing?.current || !inputText.trim()}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+      </form>
+
+      {/* Panneau technique */}
+      <div className="fixed top-0 right-0 h-full">
+        <div
+          id="techPanel"
+          className="w-full md:w-96 h-full bg-gradient-to-r from-gray-900 to-purple-900/90 border-l border-violet-500/50 shadow-2xl overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
+        >
+          <div className="flex justify-around items-center p-5 bg-gradient-to-r from-violet-900 via-purple-800 to-indigo-900 text-white">
+            <h2 className="text-lg font-bold font-['Cinzel',serif]">
+              Panneau Technique
+            </h2>
+            <div className="flex space-x-3">
+              <button
+                className="bg-violet-800 text-white p-2.5 rounded-full shadow-lg hover:bg-violet-700 transition-all duration-300"
+                onClick={downloadConversation}
+                title="Télécharger la conversation"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                if (isBackgroundMusicPlaying) {
+                  pauseBackgroundMusic();
+                } else {
+                  playBackgroundMusic();
+                }
+              }}
+              className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+                isBackgroundMusicPlaying
+                  ? "bg-emerald-600 text-white shadow-lg"
+                  : "bg-violet-800 text-white shadow-lg"
+              }`}
+            >
+              {isBackgroundMusicPlaying ? "Pause musique" : "Jouer musique"}
+            </button>
+            <button
+              className="bg-violet-800 text-white p-3 rounded-l-lg shadow-lg hover:bg-violet-700 transition-all duration-300"
+              onClick={() => {
+                const panel = document.getElementById("techPanel");
+                if (panel) {
+                  panel.classList.toggle("translate-x-full");
+                  panel.classList.toggle("translate-x-0");
+                }
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="p-5 border-b border-violet-700/30">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-violet-200 mb-2">
+                Volume musique de fond : {(backgroundVolume * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={backgroundVolume}
+                onChange={(e) => setBackgroundVolume(Number(e.target.value))}
+                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+              />
+            </div>
+            <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              Sélection de voix
+            </h3>
+            <div className="space-y-2">
+              {availableVoices.map((voice) => (
+                <div key={voice.id} className="flex items-center">
+                  <input
+                    type="radio"
+                    id={voice.id}
+                    name="voice"
+                    value={voice.id}
+                    checked={selectedVoice === voice.id}
+                    onChange={() => setSelectedVoice(voice.id)}
+                    className="mr-2 accent-violet-500"
+                  />
+                  <label
+                    htmlFor={voice.id}
+                    className={`cursor-pointer ${
+                      selectedVoice === voice.id
+                        ? "text-violet-300 font-medium"
+                        : "text-gray-400"
+                    }`}
+                  >
+                    {voice.name}
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                if (selectedVoice && !processing?.current) {
+                  speakResponse(
+                    "Ceci est un test de la voix sélectionnée. Comment puis-je vous guider aujourd'hui?"
+                  );
+                }
+              }}
+              className="mt-4 w-full bg-gradient-to-r from-violet-800 to-purple-800 hover:from-violet-700 hover:to-purple-700 text-white py-2 px-4 rounded-lg transition-all duration-300 shadow-md"
+            >
+              Tester la voix
+            </button>
+          </div>
+          <div className="p-5 border-b border-violet-700/30">
+            <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              Vitesse de la voix
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-violet-200 mb-2">
+                Vitesse: {playbackRate.toFixed(2)}x
+              </label>
+              <input
+                type="range"
+                min="0.5"
+                max="1.5"
+                step="0.05"
+                value={playbackRate}
+                onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+              />
+            </div>
+          </div>
+          <div className="p-5 border-b border-violet-700/30">
+            <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              Calibration Microphone
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-violet-200 mb-2">
+                Seuil de détection: {threshold.toFixed(4)}
+                {autoThresholdRef.current !== threshold && " (Ajusté manuellement)"}
+              </label>
+              <input
+                type="range"
+                min="0.001"
+                max="0.1"
+                step="0.001"
+                value={threshold}
+                onChange={handleThresholdChange}
+                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+              />
+            </div>
+            {isListening && !isCalibrating && (
+              <button
+                onClick={calibrateMicrophone}
+                className="w-full px-4 py-2.5 rounded-md font-medium bg-gradient-to-r from-violet-700 to-indigo-700 hover:from-violet-600 hover:to-indigo-600 text-white transition-all duration-300 shadow-md"
+              >
+                Recalibrer microphone
+              </button>
+            )}
+            {isCalibrating && (
+              <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2">
+                <div
+                  className="bg-violet-600 h-2.5 rounded-full"
+                  style={{ width: `${calibrationProgress}%` }}
+                ></div>
+                <p className="text-xs text-violet-300 mt-1">
+                  Calibration: {calibrationProgress.toFixed(0)}%
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="p-5 border-b border-violet-700/30">
+            <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              États de détection
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-gray-800/60 rounded-xl border border-violet-700/30">
+                <div className="text-xs font-medium mb-2 text-violet-300">
+                  État de parole:
+                </div>
+                <div className="flex justify-center">
+                  <span
+                    className={`w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full ${
+                      speechBooleanState === 1
+                        ? "bg-emerald-600 text-white shadow-[0_0_10px_rgba(5,150,105,0.5)]"
+                        : "bg-gray-700 text-gray-400"
+                    }`}
+                  >
+                    {speechBooleanState}
+                  </span>
+                </div>
+              </div>
+              <div className="p-4 bg-gray-800/60 rounded-xl border border-violet-700/30">
+                <div className="text-xs font-medium mb-2 text-violet-300">
+                  Fins de parole:
+                </div>
+                <div className="flex justify-center">
+                  <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-violet-700 text-white shadow-[0_0_10px_rgba(109,40,217,0.3)]">
+                    {speechEndCount}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Section pour le compteur d'interruptions */}
+            <div className="mt-4 p-4 bg-gray-800/60 rounded-xl border border-violet-700/30">
+              <div className="text-xs font-medium mb-2 text-violet-300">
+                Nombre d'interruptions:
+              </div>
+              <div className="flex justify-center">
+                <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]">
+                  {interruptionCount}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="p-5 border-b border-violet-700/30">
+            <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              Transcriptions
+            </h3>
+            {transcriptions.length === 0 ? (
+              <p className="text-gray-400 italic text-sm">
+                Aucune transcription pour le moment
+              </p>
+            ) : (
+              <div className="space-y-3 max-h-40 overflow-y-auto">
+                {transcriptions.map((trans) => (
+                  <div
+                    key={trans.id}
+                    className="p-3 bg-gray-800/60 border border-violet-700/30 rounded-lg text-sm"
+                  >
+                    <div className="flex justify-between mb-1">
+                      <span className="text-xs font-medium text-violet-300">
+                        Transcription
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {trans.timestamp}
+                      </span>
+                    </div>
+                    <p className="text-violet-100">{trans.text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="p-5 border-b border-violet-700/30">
+            <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              Audios générés
+            </h3>
+            {audioUrls.length === 0 ? (
+              <p className="text-gray-400 italic text-sm">
+                Aucun audio généré pour le moment
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {audioUrls.map((url, index) => (
+                  <div key={index} className="mb-2">
+                    <audio
+                      src={url}
+                      controls
+                      className="w-full h-10 rounded-lg"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="p-5 border-b border-violet-700/30">
+            <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              Informations de débogage
+            </h3>
+            <div className="text-xs space-y-2 bg-gray-800/60 p-3 rounded-lg text-violet-200 border border-violet-700/30">
+              <p>Volume actuel: {volume.toFixed(5)}</p>
+              <p>Seuil actuel: {threshold.toFixed(5)}</p>
+              <p>
+                Seuil après première détection:{" "}
+                {(threshold * 0.8).toFixed(5)}
+              </p>
+              <p>
+                Première parole détectée:{" "}
+                {firstSpeechDetectedRef.current ? "Oui" : "Non"}
+              </p>
+              <p>Durée minimale parole: {minSpeechDuration}ms</p>
+              <p>Silence avant fin: {silenceTimeout}ms</p>
+              <p>Seuil d'interruption: {interruptionThreshold}ms</p>
+              <p>
+                Interruption actuelle:{" "}
+                {interruptionDetected ? "Détectée" : "Aucune"}
+              </p>
+            </div>
+          </div>
+          <div className="p-5">
+            <button
+              onClick={resetCounters}
+              className="w-full px-4 py-3 rounded-lg font-medium bg-gradient-to-r from-violet-800 to-purple-800 hover:from-violet-700 hover:to-purple-700 text-white transition-all duration-300 shadow-md"
+            >
+              Réinitialiser les compteurs
+            </button>
+          </div>
+        </div>
       </div>
-    </>
+    </div>
+  </div>
+  
+  {/* Styles CSS pour les animations */}
+  <style jsx>{`
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  `}</style>
+</>
   );
 };
 
