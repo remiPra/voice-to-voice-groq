@@ -127,7 +127,7 @@ const SimpleChatApp: React.FC = () => {
     blob: null,
     url: null,
   });
-  const [showTutorial, setShowTutorial] = useState<boolean>(true);
+  const [showTutorial, setShowTutorial] = useState<boolean>(false);
   const [tutorialStep, setTutorialStep] = useState<number>(0);
 
   // Références pour l'enregistrement audio
@@ -469,7 +469,6 @@ const SimpleChatApp: React.FC = () => {
       playSound("join");
 
       // Afficher le tutoriel pour les nouveaux utilisateurs
-      setShowTutorial(true);
     } catch (error) {
       console.error("Erreur lors de l'enregistrement du profil:", error);
       showNotification("Erreur lors de l'enregistrement du profil.", "error");
@@ -970,6 +969,7 @@ const SimpleChatApp: React.FC = () => {
         }
       };
 
+      // 4. Modifiez la partie ondataavailable du mediaRecorder.onstop dans startRecording :
       mediaRecorderRef.current.onstop = async () => {
         // Réinitialiser le statut d'enregistrement
         if (db && sessionId) {
@@ -987,9 +987,8 @@ const SimpleChatApp: React.FC = () => {
           type: "audio/webm",
         });
 
-        // Créer un URL pour la prévisualisation audio
-        const audioUrl = URL.createObjectURL(audioBlob);
-        setAudioPreview({ blob: audioBlob, url: audioUrl });
+        // Au lieu de l'aperçu, envoyez directement à la transcription
+        await transcribeAudio(audioBlob);
 
         // Arrêter le compteur
         if (recordingInterval) {
@@ -1061,23 +1060,9 @@ const SimpleChatApp: React.FC = () => {
     playSound("recordStop");
   };
 
-  // Annuler la prévisualisation audio
-  const cancelAudioPreview = () => {
-    if (audioPreview.url) {
-      URL.revokeObjectURL(audioPreview.url);
-    }
-    setAudioPreview({ blob: null, url: null });
-  };
-
-  // Envoyer l'audio enregistré pour transcription
-  const sendAudioTranscription = async (): Promise<void> => {
-    if (!audioPreview.blob) return;
-
-    await transcribeAudio(audioPreview.blob);
-    cancelAudioPreview();
-  };
-
   // Transcription audio avec Groq
+  // Modifiez la fonction transcribeAudio ainsi :
+
   const transcribeAudio = async (audioBlob: Blob): Promise<void> => {
     if (!db || !sessionId || !userLanguage) return;
     setIsTranslating(true);
@@ -1115,17 +1100,40 @@ const SimpleChatApp: React.FC = () => {
       const result = (await response.json()) as TranscriptionResult;
 
       if (result.text) {
+        // Ajoutez un temps de pause pour permettre au FireStore de se synchroniser
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
         // Envoi du message transcrit
-        await addDoc(collection(db, "chat_sessions", sessionId, "messages"), {
-          text: result.text,
-          sender: userId,
-          timestamp: serverTimestamp(),
-          clientTimestamp: Date.now(),
-          language: userLanguage,
-          senderName: displayName,
-          senderAvatar: userAvatar,
-          fromVoice: true,
-        });
+        const docRef = await addDoc(
+          collection(db, "chat_sessions", sessionId, "messages"),
+          {
+            text: result.text,
+            sender: userId,
+            timestamp: serverTimestamp(),
+            clientTimestamp: Date.now(),
+            language: userLanguage,
+            senderName: displayName,
+            senderAvatar: userAvatar,
+            fromVoice: true,
+          }
+        );
+
+        // Mettre à jour le message immédiatement après l'envoi
+        // Cela force un rafraîchissement du composant et des traductions
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: docRef.id,
+            text: result.text,
+            sender: userId,
+            timestamp: null,
+            clientTimestamp: Date.now(),
+            language: userLanguage,
+            senderName: displayName,
+            senderAvatar: userAvatar,
+            fromVoice: true,
+          },
+        ]);
 
         // Jouer un son de succès
         playSound("transcribe");
@@ -1140,7 +1148,6 @@ const SimpleChatApp: React.FC = () => {
       setIsTranslating(false);
     }
   };
-
   // Traduction du texte
   const translateText = async (
     text: string,
@@ -1831,121 +1838,6 @@ const SimpleChatApp: React.FC = () => {
         darkMode ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"
       }`}
     >
-      {/* Tutoriel pour les nouveaux utilisateurs */}
-      <AnimatePresence>
-        {showTutorial && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              className={`relative w-full max-w-md p-6 rounded-xl ${
-                darkMode ? "bg-gray-800" : "bg-white"
-              } shadow-2xl`}
-            >
-              <h2 className="text-xl font-bold mb-4">
-                Bienvenue dans le Chat Multilingue!
-              </h2>
-
-              {tutorialStep === 0 && (
-                <div>
-                  <p className="mb-4">
-                    Cette application permet de communiquer en temps réel avec
-                    des personnes parlant différentes langues.
-                  </p>
-                  <p className="mb-4">
-                    Tous les messages seront automatiquement traduits dans votre
-                    langue (
-                    {languageNames[userLanguage as keyof typeof languageNames]}
-                    ).
-                  </p>
-                </div>
-              )}
-
-              {tutorialStep === 1 && (
-                <div>
-                  <p className="mb-4">
-                    Vous pouvez envoyer des messages texte ou utiliser votre
-                    voix pour communiquer.
-                  </p>
-                  <p className="mb-4">
-                    Cliquez sur le microphone pour enregistrer un message vocal,
-                    qui sera transcrit automatiquement.
-                  </p>
-                </div>
-              )}
-
-              {tutorialStep === 2 && (
-                <div>
-                  <p className="mb-4">
-                    Pour inviter d'autres personnes, partagez le QR code ou l'ID
-                    de session visible en haut de l'écran.
-                  </p>
-                  <p className="mb-4">
-                    La traduction est automatique, vous pouvez voir le message
-                    original en activant l'option "Affichage bilingue" dans les
-                    paramètres.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex justify-between mt-6">
-                {tutorialStep > 0 ? (
-                  <button
-                    onClick={() => setTutorialStep((prev) => prev - 1)}
-                    className={`px-4 py-2 rounded-lg ${
-                      darkMode
-                        ? "bg-gray-700 hover:bg-gray-600"
-                        : "bg-gray-200 hover:bg-gray-300"
-                    }`}
-                  >
-                    Précédent
-                  </button>
-                ) : (
-                  <div></div>
-                )}
-
-                {tutorialStep < 2 ? (
-                  <button
-                    onClick={() => setTutorialStep((prev) => prev + 1)}
-                    className={`px-4 py-2 rounded-lg ${
-                      darkMode
-                        ? "bg-blue-600 hover:bg-blue-700"
-                        : "bg-blue-500 hover:bg-blue-600"
-                    } text-white`}
-                  >
-                    Suivant
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowTutorial(false)}
-                    className={`px-4 py-2 rounded-lg ${
-                      darkMode
-                        ? "bg-blue-600 hover:bg-blue-700"
-                        : "bg-blue-500 hover:bg-blue-600"
-                    } text-white`}
-                  >
-                    Commencer
-                  </button>
-                )}
-              </div>
-
-              <button
-                className="absolute top-2 right-2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
-                onClick={() => setShowTutorial(false)}
-              >
-                <BiX size={20} />
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* En-tête avec le titre et boutons */}
       <header
         className={`p-3 ${
@@ -2182,7 +2074,7 @@ const SimpleChatApp: React.FC = () => {
                   }`}
                 >
                   <h3 className="font-medium mb-2">Partagez ce QR code</h3>
-                  <div className="bg-white p-3 inline-block rounded-lg mx-auto mb-3 w-full flex justify-center">
+                  <div className="bg-white p-3 rounded-lg mx-auto mb-3 w-full flex justify-center">
                     <QRCode
                       value={`${window.location.origin}${window.location.pathname}?session=${sessionId}`}
                       size={180}
@@ -2652,54 +2544,6 @@ const SimpleChatApp: React.FC = () => {
               {participants[recordingUser]?.displayName || "Un utilisateur"} est
               en train d'enregistrer...
             </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Interface de prévisualisation audio */}
-      <AnimatePresence>
-        {audioPreview.url && (
-          <motion.div
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
-            className={`fixed bottom-24 left-1/2 transform -translate-x-1/2 p-4 rounded-lg shadow-lg z-20 ${
-              darkMode ? "bg-gray-800" : "bg-white"
-            }`}
-          >
-            <h3 className="text-center font-medium mb-2">
-              Prévisualisation audio
-            </h3>
-
-            <audio
-              src={audioPreview.url}
-              controls
-              className="mb-3 w-full max-w-xs"
-            />
-
-            <div className="flex justify-between space-x-3">
-              <button
-                onClick={cancelAudioPreview}
-                className={`flex-1 py-2 px-4 rounded-lg ${
-                  darkMode
-                    ? "bg-gray-700 hover:bg-gray-600"
-                    : "bg-gray-200 hover:bg-gray-300"
-                } transition-colors`}
-              >
-                Annuler
-              </button>
-
-              <button
-                onClick={sendAudioTranscription}
-                className={`flex-1 py-2 px-4 rounded-lg ${
-                  darkMode
-                    ? "bg-blue-600 hover:bg-blue-700"
-                    : "bg-blue-500 hover:bg-blue-600"
-                } text-white transition-colors`}
-              >
-                Envoyer
-              </button>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
