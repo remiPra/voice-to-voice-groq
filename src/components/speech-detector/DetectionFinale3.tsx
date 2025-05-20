@@ -875,22 +875,39 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
       setError("");
 
       // Son d'attente
-      const waitingAudio = new Audio("/no_input.mp3");
+      const waitingAudio = new Audio("/waiting.mp3");
       waitingAudio.loop = true;
       waitingAudio.volume = 0.3;
       waitingAudio.play();
 
+      // const response = await fetch(
+      //   "https://api.groq.com/openai/v1/chat/completions",
+      //   {
+      //     method: "POST",
+      //     headers: {
+      //       Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+      //       "Content-Type": "application/json",
+      //     },
+      //     body: JSON.stringify({
+      //       messages: messageHistory.current,
+      //       model: "gemma2-9b-it",
+      //     }),
+      //   }
+      // );
+
       const response = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
+        "https://api.mistral.ai/v1/chat/completions",
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+            Authorization: `Bearer ${import.meta.env.VITE_MISTRAL_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             messages: messageHistory.current,
-            model: "gemma2-9b-it",
+            model: "mistral-small-latest", // Ou "mistral-tiny-latest" si tu préfères
+            temperature: 0.7,
+            max_tokens: 500,
           }),
         }
       );

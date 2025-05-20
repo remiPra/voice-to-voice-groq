@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Détection de Mot-Clé</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        text-align: center;
+      }
+      .status {
+        padding: 10px;
+        margin: 20px 0;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      .listening {
+        background-color: #e6f7ff;
+        color: #0066cc;
+        border: 1px solid #0066cc;
+      }
+      .detected {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #155724;
+      }
+      .active {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #856404;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #721c24;
+      }
+      button {
+        background-color: #0066cc;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 10px;
+        font-size: 16px;
+      }
+      button:hover {
+        background-color: #004c99;
+      }
+      #transcript {
+        margin-top: 20px;
+        min-height: 100px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        text-align: left;
+      }
+      .log-entry {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+      #animation {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background-color: #0066cc;
+        margin: 20px auto;
+        transition: transform 0.3s ease;
+      }
+      .pulse {
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          background-color: #0066cc;
+        }
+        50% {
+          transform: scale(1.1);
+          background-color: #004c99;
+        }
+        100% {
+          transform: scale(1);
+          background-color: #0066cc;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Test de Détection de Mot-Clé</h1>
+
+    <div id="animation"></div>
+
+    <div id="status" class="status listening">En attente du mot-clé...</div>
+
+    <div>
+      <button id="startBtn">Démarrer la détection</button>
+      <button id="stopBtn">Arrêter la détection</button>
+      <button id="triggerBtn">Déclencher manuellement</button>
+    </div>
+
+    <div>
+      <p>
+        Mots-clés disponibles:
+        <strong
+          >"assistant écoute", "ok assistant", "rémi écoute", "ok rémi", "hey
+          rémi"</strong
+        >
+      </p>
+    </div>
+
+    <div id="transcript">
+      <p><em>Les transcriptions apparaîtront ici...</em></p>
+    </div>
+
+    <script>
+      // État global
+      let isKeywordMode = false;
+      let isActiveListening = false;
+      let recognitionTimeout = null;
+      let activeSessionTimer = null;
+      let recognitionCount = 0;
+      let logs = [];
+      const MAX_CONSECUTIVE_FAILS = 5;
+
+      // Éléments DOM
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const triggerBtn = document.getElementById("triggerBtn");
+      const statusDiv = document.getElementById("status");
+      const transcriptDiv = document.getElementById("transcript");
+      const animation = document.getElementById("animation");
+
+      // Fonction pour ajouter des logs
+      function addLog(message, type = "info") {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString();
+        const logEntry = document.createElement("div");
+        logEntry.className = `log-entry ${type}`;
+        logEntry.textContent = `[${timeString}] ${message}`;
+
+        logs.unshift(logEntry);
+        if (logs.length > 20) {
+          logs.pop();
+        }
+
+        // Mettre à jour l'affichage
+        transcriptDiv.innerHTML = "";
+        logs.forEach((log) => transcriptDiv.appendChild(log));
+      }
+
+      // Fonction pour mettre à jour l'état visuel
+      function updateStatus(message, className) {
+        statusDiv.textContent = message;
+        statusDiv.className = `status ${className}`;
+      }
+
+      // Fonction principale pour la détection par intervalles
+      function startIntervalRecognition() {
+        if (!isKeywordMode) return;
+
+        // Nettoyer les timeouts précédents
+        if (recognitionTimeout) {
+          clearTimeout(recognitionTimeout);
+        }
+
+        animation.classList.add("pulse");
+        updateStatus("En attente du mot-clé...", "listening");
+
+        // Fonction pour une écoute courte
+        function performShortRecognition() {
+          try {
+            const SpeechRecognition =
+              window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+              addLog("API de reconnaissance vocale non supportée", "error");
+              return;
+            }
+
+            const recognition = new SpeechRecognition();
+
+            recognition.lang = "fr-FR";
+            recognition.interimResults = false;
+            recognition.continuous = false;
+            recognition.maxAlternatives = 1;
+
+            const sessionTimeoutId = setTimeout(() => {
+              try {
+                recognition.stop();
+              } catch (e) {
+                console.warn("Erreur lors de l'arrêt forcé:", e);
+              }
+            }, 5000);
+
+            recognition.onstart = () => {
+              addLog("Écoute courte démarrée");
+            };
+
+            recognition.onresult = (event) => {
+              clearTimeout(sessionTimeoutId);
+
+              const transcript = event.results[0][0].transcript.toLowerCase();
+              addLog(`Texte capturé: "${transcript}"`);
+
+              // Réinitialiser le compteur d'échecs
+              recognitionCount = 0;
+
+              // Vérifier les mots-clés
+              const keywords = [
+                "assistant écoute",
+                "ok assistant",
+                "rémi écoute",
+                "ok rémi",
+                "hey rémi",
+              ];
+              if (keywords.some((keyword) => transcript.includes(keyword))) {
+                addLog(`MOT-CLÉ DÉTECTÉ: "${transcript}"`, "detected");
+
+                // Passer en mode écoute active
+                isKeywordMode = false;
+                clearTimeout(recognitionTimeout);
+
+                // Feedback visuel
+                updateStatus("Mot-clé détecté! Je t'écoute...", "detected");
+                animation.classList.remove("pulse");
+                animation.style.backgroundColor = "#28a745";
+
+                // Simuler une réponse vocale
+                setTimeout(() => {
+                  addLog(
+                    "Assistant: \"Oui, je t'écoute. Comment puis-je t'aider?\""
+                  );
+                  startActiveListening();
+                }, 1000);
+              }
+            };
+
+            recognition.onend = () => {
+              clearTimeout(sessionTimeoutId);
+
+              // Planifier la prochaine session
+              if (isKeywordMode) {
+                const nextDelay = Math.random() * 1000 + 1000; // 1-2 secondes
+                recognitionTimeout = setTimeout(
+                  performShortRecognition,
+                  nextDelay
+                );
+              }
+            };
+
+            recognition.onerror = (event) => {
+              clearTimeout(sessionTimeoutId);
+              addLog(`Erreur: ${event.error}`, "error");
+
+              recognitionCount++;
+
+              // Adapter le délai en fonction des échecs
+              const nextDelay =
+                recognitionCount > MAX_CONSECUTIVE_FAILS
+                  ? 10000 // 10 secondes si beaucoup d'échecs
+                  : 2000; // 2 secondes normalement
+
+              if (isKeywordMode) {
+                recognitionTimeout = setTimeout(
+                  performShortRecognition,
+                  nextDelay
+                );
+              }
+            };
+
+            // Démarrer la reconnaissance
+            recognition.start();
+          } catch (error) {
+            addLog(`Erreur critique: ${error.message}`, "error");
+
+            // Réessayer après un délai
+            if (isKeywordMode) {
+              recognitionTimeout = setTimeout(performShortRecognition, 5000);
+            }
+          }
+        }
+
+        // Lancer la première reconnaissance
+        performShortRecognition();
+      }
+
+      // Fonction pour l'écoute active après détection de mot-clé
+      function startActiveListening() {
+        isActiveListening = true;
+        updateStatus("Écoute active en cours...", "active");
+
+        try {
+          const SpeechRecognition =
+            window.SpeechRecognition || window.webkitSpeechRecognition;
+          const recognition = new SpeechRecognition();
+
+          recognition.lang = "fr-FR";
+          recognition.interimResults = true;
+          recognition.continuous = true;
+
+          recognition.onstart = () => {
+            addLog("Session d'écoute active démarrée");
+
+            // Timer pour limiter la session active
+            activeSessionTimer = setTimeout(() => {
+              addLog("⏱️ Fin de la session active (délai expiré)");
+              recognition.stop();
+
+              // Message et retour au mode mot-clé
+              addLog(
+                'Assistant: "Je n\'ai pas entendu de question. Appelle-moi à nouveau si besoin."'
+              );
+              resetToKeywordMode();
+            }, 20000);
+          };
+
+          recognition.onresult = (event) => {
+            // Prendre le dernier résultat
+            const lastResultIndex = event.results.length - 1;
+            const transcript = event.results[lastResultIndex][0].transcript;
+
+            // Si c'est un résultat final, l'afficher clairement
+            if (event.results[lastResultIndex].isFinal) {
+              addLog(`Utilisateur: "${transcript}"`, "active");
+
+              // Simuler une réponse après un délai
+              setTimeout(() => {
+                // Annuler le timer actif
+                if (activeSessionTimer) {
+                  clearTimeout(activeSessionTimer);
+                  activeSessionTimer = null;
+                }
+
+                // Réponse simulée
+                const responses = [
+                  "Je suis là pour t'aider. Que puis-je faire pour toi?",
+                  "Bien sûr! Je peux t'aider avec ça.",
+                  "D'accord, voici ce que j'ai trouvé.",
+                  "Hmm, je ne suis pas sûr de comprendre. Peux-tu reformuler?",
+                ];
+                const randomResponse =
+                  responses[Math.floor(Math.random() * responses.length)];
+                addLog(`Assistant: "${randomResponse}"`);
+
+                // Retour au mode mot-clé
+                recognition.stop();
+                resetToKeywordMode();
+              }, 1500);
+            }
+          };
+
+          recognition.onerror = (event) => {
+            addLog(`Erreur d'écoute active: ${event.error}`, "error");
+
+            if (activeSessionTimer) {
+              clearTimeout(activeSessionTimer);
+            }
+
+            resetToKeywordMode();
+          };
+
+          recognition.onend = () => {
+            addLog("Session d'écoute active terminée");
+            isActiveListening = false;
+          };
+
+          recognition.start();
+        } catch (error) {
+          addLog(
+            `Erreur de démarrage d'écoute active: ${error.message}`,
+            "error"
+          );
+          resetToKeywordMode();
+        }
+      }
+
+      // Réinitialiser au mode d'écoute de mot-clé
+      function resetToKeywordMode() {
+        if (activeSessionTimer) {
+          clearTimeout(activeSessionTimer);
+          activeSessionTimer = null;
+        }
+
+        isKeywordMode = true;
+        isActiveListening = false;
+        updateStatus("En attente du mot-clé...", "listening");
+        animation.classList.add("pulse");
+        animation.style.backgroundColor = "#0066cc";
+
+        // Redémarrer la détection par intervalles
+        startIntervalRecognition();
+      }
+
+      // Fonction pour le déclenchement manuel
+      function triggerManually() {
+        if (isActiveListening) return;
+
+        isKeywordMode = false;
+        if (recognitionTimeout) {
+          clearTimeout(recognitionTimeout);
+        }
+
+        updateStatus("Activation manuelle!", "detected");
+        animation.classList.remove("pulse");
+        animation.style.backgroundColor = "#28a745";
+
+        addLog("Activation manuelle de l'assistant");
+        addLog("Assistant: \"Oui, je t'écoute. Comment puis-je t'aider?\"");
+
+        setTimeout(startActiveListening, 1000);
+      }
+
+      // Événements des boutons
+      startBtn.addEventListener("click", () => {
+        isKeywordMode = true;
+        startIntervalRecognition();
+      });
+
+      stopBtn.addEventListener("click", () => {
+        isKeywordMode = false;
+        isActiveListening = false;
+
+        if (recognitionTimeout) {
+          clearTimeout(recognitionTimeout);
+        }
+
+        if (activeSessionTimer) {
+          clearTimeout(activeSessionTimer);
+        }
+
+        updateStatus("Détection arrêtée", "error");
+        animation.classList.remove("pulse");
+        animation.style.backgroundColor = "#dc3545";
+
+        addLog("Détection arrêtée par l'utilisateur");
+      });
+
+      triggerBtn.addEventListener("click", triggerManually);
+
+      // Démarrer automatiquement
+      addLog(
+        "Page chargée. Cliquez sur 'Démarrer la détection' pour commencer."
+      );
+    </script>
+  </body>
+</html>

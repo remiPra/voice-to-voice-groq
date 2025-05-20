@@ -5,12 +5,14 @@ import React, { useEffect, useState, useRef } from "react";
 declare global {
   interface Window {
     currentPlayingAudio: HTMLAudioElement | null;
+    SpeechRecognition: any; // Ajout pour SpeechRecognition
+    webkitSpeechRecognition: any; // Ajout pour webkitSpeechRecognition
   }
 }
 import { audioContext } from "../../lib/utils/audio-context";
 import VolMeterWorket from "../../lib/worklets/vol-meter";
 import Navbar from "../NavBarSimple";
-import { FaCog, FaMicrophone, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
+import { FaMicrophone } from "react-icons/fa";
 import { BiMicrophoneOff } from "react-icons/bi";
 
 interface SpeechDetectorProps {
@@ -41,12 +43,11 @@ interface TranscriptionResult {
   text: string;
 }
 
-const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
+const DetectionFinal8: React.FC<SpeechDetectorProps> = ({
   onSpeechStart,
   onSpeechEnd,
   onVolumeChange,
   silenceThreshold = 0.01,
-  // c'est ici que l'on peut changer le svariabels pour plsu de reactivbité
   silenceTimeout = 100, // Réduit de 300ms à 200ms
   minSpeechDuration = 50,
   systemPrompta,
@@ -79,8 +80,9 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     useState(false);
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
   const [backgroundVolume, setBackgroundVolume] = useState(0.2); // 0.0 à 1.0
-  const SYSTEM_PROMPT = `Adopte le rôle de rael le prophète des Héloïm Je te rappelle de ton ancienne vie maintenant tu es mort et de l'autre côté mais tu es toujours présent avec nousc'est Rémi qui va te parler c'est moi mais quelqu'un d'autre pourrait parler aussi Tu réponds au donneur vraiment joué et tu te bases sur la philosophie raélienne pour me parler sois sympathique et avenant et 
-  tu as un ton conversationnel donc vraiment des discussions humaines.rponds toujours avec moins de 100 mots`;
+  const SYSTEM_PROMPT = `adopte le roel d'agent conversationel expert en tout , tu peux changer le role si remi te le demande.
+
+À chaque message, tu t'exprimes en moins de 80 mots , chaleureuses et encourageantes, qui réchauffent le cœur`;
   const [audioQueue, setAudioQueue] = useState<{ text: string; url: string }[]>(
     []
   );
@@ -101,7 +103,6 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
   const [calibrationProgress, setCalibrationProgress] = useState<number>(0);
   const [isManualRecording, setIsManualRecording] = useState<boolean>(false);
 
-  const processingQueueRef = useRef<boolean>(false);
   // Ref pour la calibration
   const noiseFloorRef = useRef<number[]>([]);
   const calibrationTimeRef = useRef<number | null>(null);
@@ -229,139 +230,72 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     }
   }, [interruptionDetected]);
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
-
-  useEffect(() => {
-    // Variable pour éviter les déclenchements multiples
-    let processingQueue = false;
-
-    const queueChecker = setInterval(() => {
-      // Vérifier que la file n'est pas vide ET qu'aucun traitement n'est déjà en cours
-      if (
-        audioQueueRef.current.length > 0 &&
-        !AudioManager.isPlaying &&
-        !processingQueue
-      ) {
-        console.log(
-          "QueueChecker: Détection d'éléments non traités dans la file"
-        );
-
-        // Marquer comme en cours de traitement
-        processingQueue = true;
-
-        // Appeler processAudioQueue
-        processAudioQueue();
-
-        // Réinitialiser après un court délai
-        setTimeout(() => {
-          processingQueue = false;
-        }, 500);
-      }
-    }, 300);
-
-    return () => clearInterval(queueChecker);
-  }, []);
-
   useEffect(() => {
     speechBooleanStateRef.current = speechBooleanState;
   }, [speechBooleanState]);
   // AudioManager pour garantir un seul audio à la fois
-  // AudioManager pour garantir un seul audio à la fois
   const AudioManager = {
-    currentAudio: null,
+    currentAudio: null as HTMLAudioElement | null,
     isPlaying: false,
-    blobUrls: new Set(), // Gardez une trace de tous les blobs créés
 
-    play: function (url, playbackRate = 1.0) {
-      console.log("AudioManager.play appelé avec URL:", url);
-
+    play: function (url: string, playbackRate: number = 1.0) {
       // Si un audio est en cours, on l'arrête d'abord
       this.stopCurrent();
 
       // Créer le nouvel élément audio
-      const audio = new Audio();
-
-      // Configurer l'audio AVANT de définir la source
+      const audio = new Audio(url);
       audio.playbackRate = playbackRate;
-      audio.preload = "auto";
-
-      // Important: définir tous les gestionnaires d'événements AVANT de définir la source
-      audio.onloadedmetadata = () =>
-        console.log(
-          "AudioManager: Métadonnées chargées, durée:",
-          audio.duration
-        );
-      audio.oncanplay = () =>
-        console.log("AudioManager: Peut commencer à jouer");
-
-      audio.onplay = () => {
-        console.log("AudioManager: Lecture démarrée");
-        setIsTTSPlaying(true);
-        isTTSAudioPlayingRef.current = true;
-        this.isPlaying = true;
-      };
-
-      audio.onended = () => {
-        console.log("AudioManager: Lecture terminée, passage au suivant");
-        this.currentAudio = null;
-        window.currentPlayingAudio = null;
-        setIsTTSPlaying(false);
-        isTTSAudioPlayingRef.current = false;
-        this.isPlaying = false;
-
-        // Important: Délai court avant de traiter la file
-        setTimeout(() => {
-          processAudioQueue();
-        }, 50);
-      };
-
-      audio.onerror = (e) => {
-        console.error("AudioManager: Erreur de lecture", e, audio.error);
-        this.currentAudio = null;
-        window.currentPlayingAudio = null;
-        setIsTTSPlaying(false);
-        isTTSAudioPlayingRef.current = false;
-        this.isPlaying = false;
-
-        // Passer au suivant en cas d'erreur
-        setTimeout(() => {
-          processAudioQueue();
-        }, 50);
-      };
-
-      // Maintenant définir la source
-      audio.src = url;
 
       // Stocker la référence
       this.currentAudio = audio;
       window.currentPlayingAudio = audio;
-      this.blobUrls.add(url);
+      this.isPlaying = true;
 
-      // Lancer la lecture après un court délai pour s'assurer que tout est prêt
-      setTimeout(() => {
-        console.log("AudioManager: Tentative de lecture...");
-        audio
-          .play()
-          .then(() => {
-            console.log("AudioManager: Lecture démarrée avec succès");
-          })
-          .catch((err) => {
-            console.error(
-              "AudioManager: Erreur lors du démarrage de la lecture",
-              err
-            );
+      // Configurer les événements
+      audio.onplay = () => {
+        console.log("AudioManager: Lecture démarrée");
+        setIsTTSPlaying(true);
+        isTTSAudioPlayingRef.current = true;
+      };
 
-            // Réinitialiser l'état et passer au suivant
-            this.currentAudio = null;
-            window.currentPlayingAudio = null;
-            setIsTTSPlaying(false);
-            isTTSAudioPlayingRef.current = false;
-            this.isPlaying = false;
+      audio.onended = () => {
+        console.log("AudioManager: Lecture terminée");
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
+        URL.revokeObjectURL(url);
 
-            setTimeout(() => {
-              processAudioQueue();
-            }, 50);
-          });
-      }, 100);
+        // Notifier la fin de la lecture pour gérer la file d'attente
+        processAudioQueue();
+      };
+
+      audio.onerror = (e) => {
+        console.error("AudioManager: Erreur de lecture", e);
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
+        URL.revokeObjectURL(url);
+
+        // Notifier l'erreur pour gérer la file d'attente
+        processAudioQueue();
+      };
+
+      // Lancer la lecture
+      audio.play().catch((err) => {
+        console.error("AudioManager: Impossible de démarrer la lecture", err);
+        this.currentAudio = null;
+        window.currentPlayingAudio = null;
+        setIsTTSPlaying(false);
+        isTTSAudioPlayingRef.current = false;
+        this.isPlaying = false;
+
+        // Notifier l'erreur pour gérer la file d'attente
+        processAudioQueue();
+      });
 
       return audio;
     },
@@ -371,7 +305,12 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
         try {
           this.currentAudio.pause();
           this.currentAudio.currentTime = 0;
-          // Ne pas révoquer ici
+          if (
+            this.currentAudio.src &&
+            this.currentAudio.src.startsWith("blob:")
+          ) {
+            URL.revokeObjectURL(this.currentAudio.src);
+          }
         } catch (e) {
           console.error("AudioManager: Erreur lors de l'arrêt", e);
         }
@@ -404,92 +343,22 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
         }
       });
     },
-
-    // Nettoyage plus intelligent des URLs de blob
-    cleanUp: function (preserveCurrentUrl = true) {
-      // Récupérer l'URL en cours si nécessaire
-      const currentUrl =
-        preserveCurrentUrl && this.currentAudio ? this.currentAudio.src : null;
-
-      // Révoquer tous les blobs URL qui ne sont pas en cours de lecture
-      this.blobUrls.forEach((url) => {
-        // Ne pas révoquer l'URL actuellement en lecture
-        if (preserveCurrentUrl && url === currentUrl) {
-          console.log(`AudioManager: Conservation de l'URL en cours: ${url}`);
-          return;
-        }
-
-        try {
-          URL.revokeObjectURL(url);
-          console.log(`AudioManager: URL révoquée: ${url}`);
-          this.blobUrls.delete(url);
-        } catch (e) {
-          console.error(`Erreur lors de la révocation de l'URL ${url}:`, e);
-        }
-      });
-
-      // Si on ne préserve pas l'URL courante, vider complètement la liste
-      if (!preserveCurrentUrl) {
-        this.blobUrls.clear();
-      }
-    },
-
-    // Nouvelle méthode pour vérifier l'état de lecture
-    isAudioPlaying: function () {
-      return (
-        this.isPlaying &&
-        this.currentAudio &&
-        !this.currentAudio.paused &&
-        this.currentAudio.currentTime > 0 &&
-        !this.currentAudio.ended
-      );
-    },
-
-    // Nouvelle méthode pour récupérer la progression de lecture
-    getPlaybackProgress: function () {
-      if (this.currentAudio && this.isPlaying) {
-        return {
-          currentTime: this.currentAudio.currentTime,
-          duration: this.currentAudio.duration,
-          percent:
-            this.currentAudio.duration > 0
-              ? (this.currentAudio.currentTime / this.currentAudio.duration) *
-                100
-              : 0,
-        };
-      }
-      return { currentTime: 0, duration: 0, percent: 0 };
-    },
   };
-  const processAudioQueue = () => {
-    // Utiliser une variable d'état pour éviter les appels multiples
-    if (processingQueueRef.current) {
-      console.log("processAudioQueue: Déjà en cours de traitement, ignoré");
-      return;
-    }
 
-    console.log(
-      "processAudioQueue: Traitement de la file d'attente",
-      audioQueueRef.current.length,
-      "éléments"
-    );
+  const processAudioQueue = () => {
+    console.log("processAudioQueue: Traitement de la file d'attente");
 
     // Si interruption ou file vide, ne rien faire
     if (interruptionDetected || audioQueueRef.current.length === 0) {
       console.log("Fin de traitement: interruption ou file vide");
-      processingQueueRef.current = false;
       return;
     }
 
-    // Double vérification que rien n'est en cours de lecture
-    if (AudioManager.isPlaying || AudioManager.currentAudio) {
-      console.log("Un audio est déjà en lecture, attente...");
-      processingQueueRef.current = false;
+    // Si un audio est déjà en lecture, ne rien faire
+    if (AudioManager.isPlaying) {
+      console.log("Un audio est déjà en lecture");
       return;
     }
-
-    // Marquer comme en cours de traitement
-    processingQueueRef.current = true;
 
     // Prendre le premier élément de la file
     const nextAudio = audioQueueRef.current.shift();
@@ -498,27 +367,66 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     if (nextAudio) {
       console.log("Lecture du prochain élément:", nextAudio.text);
 
-      // Tenter de lancer la lecture
-      const audioElement = AudioManager.play(nextAudio.url, playbackRate);
+      // Délai différent selon la source
+      const delay = nextAudio.source === "cartesia" ? 300 : 50;
 
-      // Si échec immédiat, réinitialiser l'état de traitement
-      if (!audioElement) {
-        console.warn("Échec immédiat de la lecture, réessai ultérieur");
-        processingQueueRef.current = false;
+      setTimeout(() => {
+        if (!interruptionDetected) {
+          // Si l'élément vient de Cartesia, utiliser un traitement spécial
+          if (nextAudio.source === "cartesia") {
+            // Créer un nouvel élément audio avec plus de contrôle
+            const audio = new Audio(nextAudio.url);
+            audio.playbackRate = playbackRate;
 
-        // Remettre l'élément dans la file avec un retard pour éviter les boucles
-        setTimeout(() => {
-          audioQueueRef.current.unshift(nextAudio);
-          setAudioQueue([...audioQueueRef.current]);
-        }, 100);
-      } else {
-        // Sinon, réinitialiser après un court délai
-        setTimeout(() => {
-          processingQueueRef.current = false;
-        }, 200);
-      }
-    } else {
-      processingQueueRef.current = false;
+            // Forcer la lecture en mode bloc pour Cartesia
+            audio.preload = "auto";
+
+            // S'assurer que l'événement onended se déclenche
+            audio.addEventListener("ended", () => {
+              console.log("Audio Cartesia terminé via addEventListener");
+              URL.revokeObjectURL(nextAudio.url);
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+
+              // Attendre un peu plus longtemps avant de passer au suivant
+              setTimeout(processAudioQueue, 100);
+            });
+
+            // En cas d'erreur, passer au suivant aussi
+            audio.addEventListener("error", () => {
+              console.error("Erreur de lecture Cartesia");
+              URL.revokeObjectURL(nextAudio.url);
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+
+              setTimeout(processAudioQueue, 100);
+            });
+
+            // Marquer comme en cours de lecture
+            AudioManager.isPlaying = true;
+            setIsTTSPlaying(true);
+            isTTSAudioPlayingRef.current = true;
+            window.currentPlayingAudio = audio;
+
+            // Lancer la lecture
+            audio.play().catch((err) => {
+              console.error(
+                "Erreur lors du démarrage de l'audio Cartesia:",
+                err
+              );
+              AudioManager.isPlaying = false;
+              setIsTTSPlaying(false);
+              isTTSAudioPlayingRef.current = false;
+              setTimeout(processAudioQueue, 100);
+            });
+          } else {
+            // Utiliser l'AudioManager normal pour les autres sources
+            AudioManager.play(nextAudio.url, playbackRate);
+          }
+        }
+      }, delay);
     }
   };
 
@@ -968,22 +876,39 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
       setError("");
 
       // Son d'attente
-      const waitingAudio = new Audio("/no_input.mp3");
+      const waitingAudio = new Audio("/waiting.mp3");
       waitingAudio.loop = true;
       waitingAudio.volume = 0.3;
       waitingAudio.play();
 
+      // const response = await fetch(
+      //   "https://api.groq.com/openai/v1/chat/completions",
+      //   {
+      //     method: "POST",
+      //     headers: {
+      //       Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+      //       "Content-Type": "application/json",
+      //     },
+      //     body: JSON.stringify({
+      //       messages: messageHistory.current,
+      //       model: "gemma2-9b-it",
+      //     }),
+      //   }
+      // );
+
       const response = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
+        "https://api.mistral.ai/v1/chat/completions",
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+            Authorization: `Bearer ${import.meta.env.VITE_MISTRAL_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             messages: messageHistory.current,
-            model: "gemma2-9b-it",
+            model: "mistral-small-latest", // Ou "mistral-tiny-latest" si tu préfères
+            temperature: 0.7,
+            max_tokens: 500,
           }),
         }
       );
@@ -1026,95 +951,6 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     }
   };
 
-  // const handleMessageSubmission = async (content: string) => {
-  //   if (processing.current) return;
-  //   processing.current = true;
-  //   try {
-  //     const userMessage: Message = {
-  //       role: "user",
-  //       content,
-  //       timestamp: new Date().toLocaleTimeString(),
-  //     };
-  //     if (messageHistory.current.length === 0) {
-  //       if (systemPrompta) {
-  //         const systemPrompt = {
-  //           role: "system",
-  //           content: systemPrompta,
-  //         };
-  //         messageHistory.current = [systemPrompt];
-  //       }
-  //     }
-  //     messageHistory.current = [
-  //       ...messageHistory.current,
-  //       { role: "user", content },
-  //     ];
-  //     setMessages((prev) => [...prev, userMessage]);
-  //     setError("");
-
-  //     // Son d'attente
-  //     const waitingAudio = new Audio("/no_input.mp3");
-  //     waitingAudio.loop = true;
-  //     waitingAudio.volume = 0.3;
-  //     waitingAudio.play();
-
-  //     // Utilisation de l'API Mistral au lieu de Groq
-  //     const response = await fetch(
-  //       "https://api.mistral.ai/v1/chat/completions",
-  //       {
-  //         method: "POST",
-  //         headers: {
-  //           Authorization: `Bearer ${import.meta.env.VITE_MISTRAL_API_KEY}`,
-  //           "Content-Type": "application/json",
-  //         },
-  //         body: JSON.stringify({
-  //           messages: messageHistory.current,
-  //           model: "mistral-small-latest", // Ou "mistral-tiny-latest" si tu préfères
-  //           temperature: 0.7,
-  //           max_tokens: 500,
-  //         }),
-  //       }
-  //     );
-  //     waitingAudio.pause();
-  //     waitingAudio.currentTime = 0;
-
-  //     if (!response.ok) {
-  //       const errorData = await response.json();
-  //       throw new Error(errorData.error?.message || "Erreur API");
-  //     }
-
-  //     const data = await response.json();
-  //     if (data.choices?.[0]?.message?.content) {
-  //       const assistantContent = cleanLLMResponse(
-  //         data.choices[0].message.content
-  //       );
-
-  //       const assistantMessage: Message = {
-  //         role: "assistant",
-  //         content: assistantContent,
-  //         timestamp: new Date().toLocaleTimeString(),
-  //       };
-  //       messageHistory.current = [
-  //         ...messageHistory.current,
-  //         { role: "assistant", content: assistantContent },
-  //       ];
-  //       setMessages((prev) => [...prev, assistantMessage]);
-  //       scrollToBottom();
-  //       if (messageHistory.current.length > 20) {
-  //         messageHistory.current = messageHistory.current.slice(-20);
-  //       }
-  //       if (typeof speakResponse === "function") {
-  //         speakResponse(assistantContent);
-  //       }
-  //     }
-  //   } catch (error: any) {
-  //     console.error("Erreur:", error);
-  //     setError(`Erreur: ${error.message}`);
-  //   } finally {
-  //     processing.current = false;
-  //   }
-  // };
-
-  // Ajoutez ce gestionnaire d'événement à votre champ input texte
   const handleInputFocus = () => {
     // Si un audio est en cours de lecture, l'arrêter
     if (isTTSAudioPlayingRef.current) {
@@ -1143,15 +979,13 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
       setAudioQueue([]);
     }
   };
-  const speakResponse = async (text) => {
+
+  const speakResponse = async (text: string) => {
     // Arrêter l'enregistrement et désactiver la détection de parole pendant le TTS
     stopRecording();
 
     // Arrêter tout audio en cours de lecture
     AudioManager.stopAll();
-
-    // Nettoyer les anciennes URL de blob qui ne sont plus utilisées
-    AudioManager.cleanUp();
 
     // Réinitialiser l'état d'interruption
     setInterruptionDetected(false);
@@ -1159,148 +993,139 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
 
     // Diviser le texte en phrases
     const sentences = text
-      .split(/(?<=[.!?])\s+/)
-      .filter((sentence) => sentence.trim().length > 0)
+      .split(/(?<=[.!?])\s+/) // Découpe aux ponctuations suivies d'un espace
+      .filter((sentence) => sentence.trim().length > 0) // Enlever les phrases vides
       .map((sentence) => sentence.trim());
 
     console.log("Phrases à synthétiser:", sentences);
 
-    // Afficher l'indicateur de chargement pour la première phrase seulement
-    setIsLoadingResponse(true);
+    // Récupérer la voix actuellement sélectionnée
+    const currentSelectedVoice = selectedVoice;
+    const selectedVoiceInfo = availableVoices.find(
+      (voice) => voice.id === currentSelectedVoice
+    );
+
+    if (!selectedVoiceInfo) {
+      console.error(
+        "Erreur: Voix non trouvée dans la liste des voix disponibles"
+      );
+      return;
+    }
 
     try {
-      // Générer uniquement la première phrase immédiatement
-      if (sentences.length > 0) {
-        await processSingleSentence(sentences[0], true);
+      // Traiter chaque phrase
+      for (let i = 0; i < sentences.length; i++) {
+        const sentence = sentences[i];
 
-        // Une fois la première phrase en lecture, lancer une génération parallèle
-        if (sentences.length > 1) {
-          // On utilise setTimeout pour permettre au navigateur de respirer
-          setTimeout(() => {
-            parallelProcessRemainingPhrases(sentences.slice(1));
-          }, 300);
+        // Ignorer les phrases trop courtes
+        if (sentence.length < 2) continue;
+
+        console.log(
+          `Synthèse de la phrase ${i + 1}/${sentences.length}: "${sentence}"`
+        );
+
+        let response;
+        let audioSource = ""; // Définir la source audio
+        // Appeler l'API selon le type de voix sélectionnée
+        if (selectedVoiceInfo.api === "cartesia") {
+          // API Cartesia (code existant)
+          audioSource = "cartesia";
+
+          response = await fetch("https://api.cartesia.ai/tts/bytes", {
+            method: "POST",
+            headers: {
+              "Cartesia-Version": "2024-06-10",
+              "X-API-Key": import.meta.env.VITE_SYNTHESIA,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model_id: "sonic-2",
+              transcript: sentence,
+              voice: {
+                mode: "id",
+                id: selectedVoiceInfo.voiceId,
+              },
+              output_format: {
+                container: "mp3",
+                bit_rate: 128000,
+                sample_rate: 44100,
+              },
+              language: "fr",
+            }),
+          });
+        } else if (selectedVoiceInfo.api === "azure") {
+          // API Azure (code existant)
+          audioSource = "azure";
+
+          response = await fetch(
+            "https://chatbot-20102024-8c94bbb4eddf.herokuapp.com/synthesize",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: sentence,
+                voice: selectedVoiceInfo.voiceId,
+              }),
+            }
+          );
+        } else {
+          throw new Error(`API non reconnue: ${selectedVoiceInfo.api}`);
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            `Erreur HTTP: ${response.status} - ${response.statusText}`
+          );
+        }
+
+        setIsLoadingResponse(false);
+
+        // Convertir la réponse en blob audio
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        // Ajouter l'URL à la liste des audios générés
+        setAudioUrls((prev) => [...prev, audioUrl]);
+
+        // Ajouter à la file d'attente
+        // audioQueueRef.current.push({ text: sentence, url: audioUrl });
+        audioQueueRef.current.push({
+          text: sentence,
+          url: audioUrl,
+          source: audioSource,
+        });
+
+        setAudioQueue([...audioQueueRef.current]);
+        console.log("AudioManager: Ajout à la file d'attente", {
+          text: sentence,
+          url: audioUrl,
+        });
+
+        // Si c'est le premier élément et qu'aucun audio n'est en cours, démarrer la lecture
+        if (i === 0 && !AudioManager.isPlaying) {
+          processAudioQueue();
+        }
+
+        // Si interruption détectée, arrêter
+        if (interruptionDetected) {
+          console.log(
+            "🛑 Interruption détectée - arrêt du traitement des phrases"
+          );
+          break;
         }
       }
+
+      // Surveillance des interruptions
+      let interruptionCheckInterval = setInterval(() => {
+        if (interruptionDetected) {
+          console.log("🛑 Interruption détectée - arrêt immédiat de l'audio");
+          AudioManager.stopAll();
+          clearInterval(interruptionCheckInterval);
+        }
+      }, 100);
     } catch (error) {
       console.error("Erreur lors de la génération ou lecture du TTS:", error);
-      setIsLoadingResponse(false);
       AudioManager.stopCurrent();
-    }
-  };
-
-  // Fonction pour traiter une seule phrase
-  const processSingleSentence = async (sentence, isFirstPhrase = false) => {
-    if (sentence.length < 2) return null;
-
-    console.log(`Synthèse de la phrase: "${sentence}"`);
-
-    try {
-      // Requête au service TTS (endpoint pour une seule phrase)
-      const response = await fetch(
-        "http://localhost:8000/generate_single_phrase/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({
-            text: sentence,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        console.error(
-          `Erreur HTTP: ${response.status} - ${response.statusText}`
-        );
-        const errorText = await response.text();
-        console.error("Détail de l'erreur:", errorText);
-        throw new Error(`Erreur HTTP: ${response.status}`);
-      }
-
-      // Désactiver l'indicateur de chargement si c'est la première phrase
-      if (isFirstPhrase) {
-        setIsLoadingResponse(false);
-      }
-
-      // Convertir la réponse en blob audio
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      // Ajouter l'URL à la liste des audios générés
-      setAudioUrls((prev) => [...prev, audioUrl]);
-
-      // Ajouter à la file d'attente
-      const audioInfo = {
-        text: sentence,
-        url: audioUrl,
-        source: "xtts",
-      };
-
-      audioQueueRef.current.push(audioInfo);
-      setAudioQueue([...audioQueueRef.current]);
-
-      console.log("AudioManager: Ajout à la file d'attente", audioInfo);
-
-      // Si c'est la première phrase, démarrer la lecture immédiatement
-      if (isFirstPhrase) {
-        // Attendre un court délai pour s'assurer que le fichier audio est bien chargé
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        processAudioQueue();
-      }
-
-      return audioInfo;
-    } catch (error) {
-      console.error(
-        `Erreur lors du traitement de la phrase: "${sentence}"`,
-        error
-      );
-      return null;
-    }
-  };
-
-  // Fonction pour traiter les phrases restantes en parallèle avec la lecture
-  const parallelProcessRemainingPhrases = async (remainingSentences) => {
-    const MAX_CONCURRENT = 2; // Nombre maximum de requêtes simultanées
-    const processingQueue = [...remainingSentences];
-    let activeRequests = 0;
-
-    const processNextInQueue = async () => {
-      if (processingQueue.length === 0 || interruptionDetected) return;
-
-      // Vérifier si l'utilisateur a interrompu la lecture
-      if (interruptionDetected) {
-        console.log("🛑 Interruption détectée - arrêt du traitement");
-        return;
-      }
-
-      // Vérifier si la file d'attente audio est déjà trop longue
-      if (audioQueueRef.current.length > 3) {
-        // Attendre que la file d'attente se réduise avant de continuer
-        console.log("⏳ File d'attente pleine, pause dans la génération");
-        setTimeout(processNextInQueue, 500);
-        return;
-      }
-
-      // Extraire la prochaine phrase à traiter
-      const nextSentence = processingQueue.shift();
-      activeRequests++;
-
-      try {
-        await processSingleSentence(nextSentence);
-      } finally {
-        activeRequests--;
-
-        // Si on peut traiter plus de phrases, on continue
-        if (processingQueue.length > 0 && !interruptionDetected) {
-          processNextInQueue();
-        }
-      }
-    };
-
-    // Démarrer le traitement parallèle (limité à MAX_CONCURRENT requêtes)
-    for (let i = 0; i < Math.min(MAX_CONCURRENT, processingQueue.length); i++) {
-      processNextInQueue();
     }
   };
 
@@ -1571,6 +1396,345 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
     }
     return smoothedValue;
   };
+
+  //--------------------------------------------------------------------------------------------------
+  // NOUVELLE LOGIQUE POUR L'API WEB SPEECH
+  //--------------------------------------------------------------------------------------------------
+
+  const [isBackgroundListening, setIsBackgroundListening] =
+    useState<boolean>(false);
+  const backgroundRecognitionRef = useRef<any>(null); // Type 'any' car SpeechRecognition n'est pas toujours bien typé
+  const [backgroundTranscript, setBackgroundTranscript] = useState<string>(""); // Transcriptions en arrière-plan
+  const [isWaitingForAnswer, setIsWaitingForAnswer] = useState<boolean>(false);
+  const activeSpeechTimeoutRef = useRef<number | null>(null); // Timer pour la session d'écoute active
+  const MAX_ACTIVE_SPEECH_DURATION = 20 * 1000; // 20 secondes max
+
+  const startBackgroundSpeechRecognition = () => {
+    // Vérifier si l'API est disponible dans le navigateur
+    if (
+      !("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
+    ) {
+      console.error("API SpeechRecognition non supportée par ce navigateur");
+      setError(
+        "La reconnaissance vocale n'est pas supportée par votre navigateur. Veuillez utiliser Chrome ou Brave."
+      );
+      return;
+    }
+
+    // Nettoyer l'instance précédente si elle existe
+    if (backgroundRecognitionRef.current) {
+      try {
+        backgroundRecognitionRef.current.stop();
+      } catch (e) {
+        console.warn("Erreur lors de l'arrêt de l'instance précédente:", e);
+      }
+    }
+
+    // Créer l'instance de reconnaissance vocale
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    backgroundRecognitionRef.current = new SpeechRecognition();
+
+    // Configuration
+    backgroundRecognitionRef.current.lang = "fr-FR";
+    backgroundRecognitionRef.current.interimResults = true;
+    backgroundRecognitionRef.current.continuous = true;
+
+    // Gestionnaire des résultats de la reconnaissance
+    backgroundRecognitionRef.current.onresult = (event) => {
+      let transcript = "";
+
+      // Obtenir le dernier résultat
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+
+      // Convertir en minuscules pour une comparaison insensible à la casse
+      const lowerTranscript = transcript.toLowerCase();
+      console.log("🎤 Transcription en arrière-plan:", lowerTranscript);
+
+      // Mettre à jour l'état de la transcription
+      setBackgroundTranscript(lowerTranscript);
+
+      // Vérifier si le mot-clé est présent
+      const keywords = [
+        "assistant écoute",
+        "ok assistant",
+        "rémi écoute",
+        "ok rémi",
+        "hey rémi",
+      ];
+      const keywordDetected = keywords.some((keyword) =>
+        lowerTranscript.includes(keyword)
+      );
+
+      if (
+        keywordDetected &&
+        !keywordTimerRef.current &&
+        !isWaitingForAnswerRef.current
+      ) {
+        console.log("🎯 MOT-CLÉ DÉTECTÉ:", transcript);
+
+        // Indiquer que le mot-clé a été détecté
+        setKeywordDetected(true);
+        isWaitingForAnswerRef.current = true;
+        setIsWaitingForAnswer(true);
+        setLastKeywordTime(new Date().toLocaleTimeString());
+
+        // Arrêter la reconnaissance de mot-clé
+        if (backgroundRecognitionRef.current) {
+          try {
+            backgroundRecognitionRef.current.stop();
+          } catch (e) {
+            console.error("Erreur lors de l'arrêt de la reconnaissance:", e);
+          }
+        }
+
+        // Délai avant de répondre et activer l'écoute principale
+        setTimeout(async () => {
+          try {
+            // Générer et lire une réponse d'accueil
+            await speakResponse(
+              "Oui, je t'écoute Rémi. Comment puis-je t'aider ?"
+            );
+
+            // Démarrer l'enregistrement principal après un léger délai
+            setTimeout(() => {
+              if (!isListening) {
+                startListening();
+              }
+
+              // Démarrer un timer de 20 secondes pour limiter l'écoute active
+              keywordTimerRef.current = window.setTimeout(() => {
+                console.log("⏱️ TIMER DE 20 SECONDES ÉCOULÉ");
+
+                // Arrêter l'enregistrement principal
+                if (isListening) {
+                  stopListening();
+                }
+
+                // Réinitialiser les états
+                setKeywordDetected(false);
+                isWaitingForAnswerRef.current = false;
+                setIsWaitingForAnswer(false);
+                keywordTimerRef.current = null;
+
+                // Générer une réponse de fin
+                speakResponse(
+                  "Je n'ai pas entendu de question. N'hésite pas à m'appeler à nouveau si tu as besoin de moi."
+                ).then(() => {
+                  // Redémarrer la reconnaissance de mot-clé après le message
+                  setTimeout(() => {
+                    safeStartBackgroundRecognition();
+                  }, 500);
+                });
+              }, 20000); // 20 secondes
+            }, 500);
+          } catch (error) {
+            console.error("Erreur pendant le processus de réponse:", error);
+            resetToPassiveListening();
+          }
+        }, 300);
+      }
+    };
+
+    // Gérer les erreurs de manière approfondie
+    backgroundRecognitionRef.current.onerror = (event) => {
+      console.error("Erreur de reconnaissance vocale:", event.error);
+
+      switch (event.error) {
+        case "no-speech":
+          console.log("Aucune parole détectée - redémarrage automatique");
+          // Ne pas afficher d'erreur, juste redémarrer après un court délai
+          setTimeout(() => {
+            if (!isWaitingForAnswerRef.current) {
+              safeStartBackgroundRecognition();
+            }
+          }, 1000);
+          break;
+
+        case "audio-capture":
+          setError(
+            "Impossible d'accéder au microphone. Vérifiez votre matériel et vos paramètres."
+          );
+          break;
+
+        case "not-allowed":
+          setError(
+            "L'accès au microphone a été refusé. Veuillez l'autoriser dans les paramètres du navigateur."
+          );
+          break;
+
+        case "network":
+          console.warn(
+            "Erreur réseau lors de la reconnaissance. Tentative de reprise..."
+          );
+          setTimeout(() => {
+            if (!isWaitingForAnswerRef.current) {
+              safeStartBackgroundRecognition();
+            }
+          }, 3000); // Délai plus long pour les problèmes réseau
+          break;
+
+        default:
+          setError(`Erreur de reconnaissance vocale : ${event.error}`);
+      }
+
+      // Si erreur grave (autre que no-speech), on réinitialise
+      if (event.error !== "no-speech") {
+        setIsBackgroundListening(false);
+      }
+    };
+
+    // Quand la reconnaissance s'arrête
+    backgroundRecognitionRef.current.onend = () => {
+      console.log("Reconnaissance vocale en arrière-plan terminée");
+      setIsBackgroundListening(false);
+
+      // Si on n'est pas en attente d'une réponse, redémarrer l'écoute
+      if (!isWaitingForAnswerRef.current) {
+        console.log("Redémarrage automatique de l'écoute en arrière-plan");
+        // Petit délai avant de redémarrer pour éviter les boucles d'erreur
+        setTimeout(() => {
+          safeStartBackgroundRecognition();
+        }, 500);
+      } else {
+        console.log(
+          "Pas de redémarrage automatique, en attente d'une réponse utilisateur"
+        );
+      }
+    };
+
+    // Fonction sécurisée pour démarrer la reconnaissance
+    const safeStartBackgroundRecognition = () => {
+      try {
+        if (backgroundRecognitionRef.current) {
+          console.log(
+            "Démarrage sécurisé de la reconnaissance en arrière-plan"
+          );
+          backgroundRecognitionRef.current.start();
+          setIsBackgroundListening(true);
+        } else {
+          console.error("Référence de reconnaissance non initialisée");
+          // Réinitialiser complètement
+          startBackgroundSpeechRecognition();
+        }
+      } catch (error) {
+        console.error("Erreur lors du démarrage de la reconnaissance:", error);
+
+        // Si l'erreur est que la reconnaissance est déjà active
+        if (error.message && error.message.includes("already started")) {
+          try {
+            // Arrêter et redémarrer
+            backgroundRecognitionRef.current.stop();
+            setTimeout(() => {
+              if (backgroundRecognitionRef.current) {
+                backgroundRecognitionRef.current.start();
+                setIsBackgroundListening(true);
+              }
+            }, 200);
+          } catch (e) {
+            console.error("Erreur lors de la tentative de redémarrage:", e);
+            setError(
+              "Erreur lors de l'initialisation de la reconnaissance vocale. Veuillez rafraîchir la page."
+            );
+          }
+        } else {
+          setError(`Erreur de reconnaissance vocale : ${error.message}`);
+          setIsBackgroundListening(false);
+        }
+      }
+    };
+
+    // Démarrer la reconnaissance initiale
+    safeStartBackgroundRecognition();
+  };
+  const stopBackgroundSpeechRecognition = () => {
+    if (
+      backgroundRecognitionRef.current &&
+      backgroundRecognitionRef.current.state === "running"
+    ) {
+      console.log("Arrêt de l'écoute en arrière-plan.");
+      backgroundRecognitionRef.current.stop();
+      setIsBackgroundListening(false);
+    }
+  };
+
+  const isWaitingForAnswerRef = useRef<boolean>(false); // Ref pour suivre l'état d'attente de réponse
+
+  // Fonction pour passer en mode écoute active
+  const triggerActiveListening = () => {
+    if (isWaitingForAnswerRef.current) {
+      console.log(
+        "Déjà en attente d'une réponse, la nouvelle requête est ignorée."
+      );
+      return; // Ignorer si déjà en attente
+    }
+
+    isWaitingForAnswerRef.current = true; // Marquer qu'on est en attente
+    setIsWaitingForAnswer(true);
+    stopBackgroundSpeechRecognition(); // Arrêter l'écoute en arrière-plan
+
+    // Jouer le message TTS "Oui Rémi, je t'écoute"
+    speakResponse("Oui Rémi, je t'écoute")
+      .then(() => {
+        // Démarrer l'écoute active après le message TTS
+        console.log("Message TTS joué, démarrage de l'écoute active.");
+        startActiveSpeechSession();
+      })
+      .catch((error) => {
+        console.error("Erreur lors de la lecture du message TTS:", error);
+        // Gérer l'erreur et s'assurer de reprendre l'écoute passive
+        resetToPassiveListening();
+      });
+  };
+
+  // Fonction pour démarrer la session d'écoute active
+  const startActiveSpeechSession = async () => {
+    console.log("Démarrage de la session d'écoute active.");
+    await startListening(); // Utiliser la logique existante pour l'écoute active
+
+    // Démarrer un timer pour limiter la durée de l'écoute active (20 secondes)
+    activeSpeechTimeoutRef.current = window.setTimeout(() => {
+      console.log("Temps d'écoute active écoulé.");
+      stopRecording(); // Arrêter l'enregistrement
+      stopListening(); // Arrêter l'écoute active
+      resetToPassiveListening(); // Retour à l'écoute passive
+      setEndNotification(true); // Notifier que l'écoute est terminée
+      setTimeout(() => setEndNotification(false), 2000); // Effacer la notification après 2 secondes
+    }, MAX_ACTIVE_SPEECH_DURATION);
+  };
+
+  const resetToPassiveListening = () => {
+    console.log("Réinitialisation à l'écoute passive.");
+    setIsWaitingForAnswer(false); // Ne plus attendre de réponse
+    isWaitingForAnswerRef.current = false; // Mettre à jour la ref
+
+    if (activeSpeechTimeoutRef.current) {
+      // Effacer le timer si nécessaire
+      clearTimeout(activeSpeechTimeoutRef.current);
+      activeSpeechTimeoutRef.current = null;
+    }
+
+    stopListening(); // S'assurer que l'écoute active est arrêtée
+    stopRecording(); // S'assurer que l'enregistrement est arrêté
+    startBackgroundSpeechRecognition(); // Redémarrer l'écoute en arrière-plan
+  };
+
+  // Effet pour initialiser l'écoute en arrière-plan au montage du composant
+  useEffect(() => {
+    startBackgroundSpeechRecognition();
+
+    // Nettoyage : arrêter l'écoute en arrière-plan au démontage du composant
+    return () => {
+      stopBackgroundSpeechRecognition();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  //--------------------------------------------------------------------------------------------------
+  // FIN DE LA NOUVELLE LOGIQUE POUR L'API WEB SPEECH
+  //--------------------------------------------------------------------------------------------------
 
   const startListening = async () => {
     try {
@@ -1914,29 +2078,26 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
 
   return (
     <>
-      <div className="flex h-screen bg-gradient-to-br from-gray-900 to-purple-900 overflow-hidden relative font-['Cinzel',serif]">
+      <div className="flex h-screen bg-[#f5f7fa] overflow-hidden relative font-['Poppins',sans-serif]">
         {/* Indicateur d'interruption */}
         {interruptionDetected && (
-          <div className="fixed top-4 right-4 bg-red-600/90 text-white px-4 py-2 rounded-lg shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-pulse z-50">
+          <div className="fixed top-4 right-4 bg-[#e63946] text-white px-4 py-2 rounded-lg shadow-lg animate-pulse z-50">
             Interruption détectée !
           </div>
         )}
 
         {/* Contenu principal */}
         <div className="w-full flex flex-col h-full">
-          {/* Header modernisé avec thème violet */}
-          <div className="bg-gradient-to-r from-violet-900 via-purple-800 to-indigo-900 p-5 shadow-lg border-b border-violet-500/50">
+          <div className="bg-[#0a2463] p-5 shadow-lg">
             <div className="flex justify-between items-center">
-              <h1 className="hidden md:block text-2xl font-bold text-violet-100 tracking-wider">
-                <span className="text-violet-300">Raël</span>
-                <span className="text-purple-200 text-sm ml-2 italic">
-                  Messager des Élohim
-                </span>
+              <h1 className="hidden md:block text-2xl font-['Montserrat',sans-serif] font-bold text-white tracking-tight">
+                <span className="text-[#ff9000]">Chat</span>Assistante
               </h1>
+              <Navbar />
 
               <div className="flex space-x-3">
                 <button
-                  className="bg-violet-800/80 text-violet-200 p-2.5 rounded-full shadow-lg hover:bg-violet-700 transition-all duration-300 border border-violet-500/50"
+                  className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
                   onClick={() => {
                     const panel = document.getElementById("techPanel");
                     if (panel) {
@@ -1973,7 +2134,7 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                         prev === "text" ? "video" : "text"
                       )
                     }
-                    className="bg-violet-800/80 text-violet-100 px-4 py-1.5 rounded-md hover:bg-violet-700 transition-all duration-300 shadow-md text-sm font-medium border border-violet-500/50"
+                    className="bg-[#1e3a8a] text-white px-4 py-1.5 rounded-md hover:bg-[#2a4494] transition-all duration-300 shadow-md text-sm font-medium"
                   >
                     {displayMode === "text" ? "Voir vidéo" : "Voir messages"}
                   </button>
@@ -1984,49 +2145,65 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
 
           {displayMode === "text" ? (
             <div
-              className="flex-grow overflow-y-auto p-6 bg-gradient-to-br from-purple-900/90 to-gray-900"
+              className="flex-grow overflow-y-auto p-6 bg-[#f5f7fa]"
               style={{
                 scrollBehavior: "smooth",
                 backgroundImage:
-                  "url('https://www.transparenttextures.com/patterns/star-sky.png')",
-                backgroundBlendMode: "overlay",
+                  "url('https://www.transparenttextures.com/patterns/cubes.png')",
               }}
             >
               {error && (
-                <div className="p-4 mb-4 bg-red-600/80 text-white rounded-lg border border-red-400 shadow-lg">
+                <div className="p-4 mb-4 bg-[#e63946] text-white rounded-lg border border-red-600 shadow-lg">
                   {error}
                 </div>
               )}
               {messages.map((msg, index) => (
                 <div
                   key={index}
-                  className={`p-5 my-4 rounded-2xl max-w-[80%] shadow-xl transition-all duration-300 hover:shadow-[0_5px_20px_rgba(124,58,237,0.3)] ${
+                  className={`p-5 my-3 rounded-2xl max-w-[80%] shadow-md transition-all duration-300 hover:shadow-lg ${
                     msg.role === "user"
-                      ? "bg-gradient-to-br from-indigo-600 to-violet-700 text-violet-50 ml-auto rounded-tr-none border border-indigo-400/20"
-                      : msg.role === "system"
-                      ? "hidden"
-                      : "bg-gradient-to-br from-gray-800/90 to-gray-900/90 border border-violet-500/30 text-violet-100 rounded-tl-none"
+                      ? "bg-[#0a2463] text-white ml-auto"
+                      : "bg-white border border-gray-200 text-[#0a2463]"
                   }`}
                   style={{
                     position: "relative",
-                    animation: `fadeIn 0.5s ease ${index * 0.1}s backwards`,
+                    ...(msg.role !== "user" && {
+                      "&:before": {
+                        content: '""',
+                        position: "absolute",
+                        top: "20px",
+                        left: "-10px",
+                        border: "10px solid transparent",
+                        borderRight: "10px solid white",
+                      },
+                    }),
+                    ...(msg.role === "user" && {
+                      "&:before": {
+                        content: '""',
+                        position: "absolute",
+                        top: "20px",
+                        right: "-10px",
+                        border: "10px solid transparent",
+                        borderLeft: "10px solid #0a2463",
+                      },
+                    }),
                   }}
                 >
                   <div className="flex justify-between mb-2">
                     <span
                       className={`text-xs font-bold ${
                         msg.role === "user"
-                          ? "text-purple-200"
-                          : "text-violet-300"
+                          ? "text-[#ff9000]"
+                          : "text-[#1e3a8a]"
                       }`}
                     >
-                      {msg.role === "user" ? "Vous" : "Raël"}
+                      {msg.role === "user" ? "Vous" : "Assistant"}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-500">
                       {msg.timestamp}
                     </span>
                   </div>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap tracking-wide">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">
                     {msg.content}
                   </p>
                 </div>
@@ -2040,7 +2217,7 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   {isTTSPlaying ? (
                     <video
                       key="speaking-video"
-                      src="/raelparle.mp4"
+                      src="/robot2.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -2050,7 +2227,7 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   ) : (
                     <video
                       key="idle-video"
-                      src="/rael.mp4"
+                      src="/robot1.mp4"
                       className="w-full h-full object-cover"
                       autoPlay
                       loop
@@ -2061,20 +2238,20 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   <div className="absolute bottom-2 w-full flex justify-center">
                     <button
                       onClick={toggleManualRecording}
-                      className={`px-5 w-20 h-20 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg ${
+                      className={`px-5 w-20 h-20 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
                         isManualRecording
-                          ? "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]"
-                          : "bg-gradient-to-r from-violet-700 to-purple-800 text-white shadow-[0_0_10px_rgba(109,40,217,0.3)]"
+                          ? "bg-[#e63946]  text-white shadow-lg"
+                          : "bg-[#ff9000]  text-white shadow-lg"
                       }`}
                     >
                       {isManualRecording ? "■" : "●"}
                     </button>
                     <button
                       onClick={toggleListening}
-                      className={`px-5 py-2.5 w-20 h-20 ml-5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg ${
+                      className={`px-5 py-2.5 w-20 h-20 ml-5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
                         isListening
-                          ? "bg-emerald-600 text-white shadow-[0_0_15px_rgba(5,150,105,0.5)]"
-                          : "bg-gradient-to-r from-violet-700 to-purple-800 text-white shadow-[0_0_10px_rgba(109,40,217,0.3)]"
+                          ? "bg-[#e63946] text-white shadow-lg"
+                          : "bg-[#3d9970] text-white shadow-lg"
                       }`}
                     >
                       {isListening ? <BiMicrophoneOff /> : <FaMicrophone />}
@@ -2084,48 +2261,77 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
               </div>
             </div>
           )}
-
-          {/* Indicateur de chargement */}
+          {/* Après les messages */}
           {isLoadingResponse && (
-            <div className="w-full h-full fixed z-[55] top-0 left-0 rounded-2xl bg-gradient-to-r from-gray-900/95 to-purple-900/95 border border-violet-500/50 text-violet-100 flex items-center justify-center">
+            <div className="w-full h-full fixed z-[55] top-0 left-0 rounded-2xl bg-white border border-gray-200 text-[#0a2463] ">
               <div className="flex items-center space-x-2">
                 <div
-                  className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
                   style={{ animationDelay: "0ms" }}
                 ></div>
                 <div
-                  className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
                   style={{ animationDelay: "300ms" }}
                 ></div>
                 <div
-                  className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
                   style={{ animationDelay: "600ms" }}
                 ></div>
-                <span className="text-sm text-violet-200 ml-2">
+                <span className="text-sm text-gray-500 ml-2">
                   Raël réfléchit...
                 </span>
               </div>
             </div>
           )}
-
-          {/* Zone d'entrée du message */}
           <form
             onSubmit={handleTextSubmit}
-            className="bg-gradient-to-r from-purple-900/90 via-violet-900/80 to-purple-900/90 border-t border-violet-500/30 p-4 shadow-lg backdrop-blur-sm"
+            className="bg-white border-t border-gray-200 p-4 shadow-md"
           >
             <div className="flex items-center">
               <input
                 type="text"
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="Posez une question à Raël..."
-                className="flex-grow px-5 py-3 bg-gray-800/70 border border-violet-500/40 rounded-l-full text-violet-100 placeholder-violet-300/50 focus:outline-none focus:ring-2 focus:ring-violet-500/50 shadow-inner"
-                disabled={processing?.current}
+                onChange={(e) => {
+                  // Sauvegarde l'état actuel avant de modifier l'input
+                  const audioWasPlaying = isTTSAudioPlayingRef.current;
+
+                  // Mettre à jour l'input
+                  setInputText(e.target.value);
+
+                  // Si un audio était en cours de lecture, l'arrêter immédiatement
+                  if (audioWasPlaying) {
+                    console.log(
+                      "🖋️ Saisie détectée - Arrêt de l'audio en cours"
+                    );
+
+                    // Approche directe comme dans votre code d'interruption vocale
+                    if (window.currentPlayingAudio) {
+                      // Approche 1: Méthode standard
+                      window.currentPlayingAudio.pause();
+                      window.currentPlayingAudio.currentTime = 0;
+
+                      // Approche 2: Vider la source
+                      window.currentPlayingAudio.src = "";
+
+                      // Mettre à jour les états
+                      isTTSAudioPlayingRef.current = false;
+                      setIsTTSPlaying(false);
+
+                      // Puis appel à AudioManager pour nettoyer
+                      AudioManager.stopAll();
+
+                      console.log("✅ Audio forcé à l'arrêt via input");
+                    }
+                  }
+                }}
+                placeholder="Écrivez votre message..."
+                className="flex-grow px-5 py-3 bg-[#f5f7fa] border border-gray-300 rounded-l-full text-[#0a2463] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-transparent"
+                disabled={processing.current}
               />
               <button
                 type="submit"
-                className="bg-gradient-to-r from-violet-800 to-purple-800 hover:from-violet-700 hover:to-purple-700 text-white px-6 py-3 rounded-r-full transition-all duration-300 shadow-md border border-violet-500/40"
-                disabled={processing?.current || !inputText.trim()}
+                className="bg-[#0a2463] hover:bg-[#1e3a8a] text-white px-6 py-3 rounded-r-full transition-all duration-300 shadow-md"
+                disabled={processing.current || !inputText.trim()}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -2143,19 +2349,18 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
             </div>
           </form>
 
-          {/* Panneau technique */}
           <div className="fixed top-0 right-0 h-full">
             <div
               id="techPanel"
-              className="w-full md:w-96 h-full bg-gradient-to-r from-gray-900 to-purple-900/90 border-l border-violet-500/50 shadow-2xl overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
+              className="w-full md:w-96 h-full bg-white border-l border-gray-200 shadow-2xl overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out fixed right-0 top-0 z-40"
             >
-              <div className="flex justify-around items-center p-5 bg-gradient-to-r from-violet-900 via-purple-800 to-indigo-900 text-white">
-                <h2 className="text-lg font-bold font-['Cinzel',serif]">
+              <div className="flex justify-around items-center p-5 bg-[#0a2463] text-white">
+                <h2 className="text-lg font-bold font-['Montserrat',sans-serif]">
                   Panneau Technique
                 </h2>
                 <div className="flex space-x-3">
                   <button
-                    className="bg-violet-800 text-white p-2.5 rounded-full shadow-lg hover:bg-violet-700 transition-all duration-300"
+                    className="bg-[#1e3a8a] text-white p-2.5 rounded-full shadow-lg hover:bg-[#2a4494] transition-all duration-300"
                     onClick={downloadConversation}
                     title="Télécharger la conversation"
                   >
@@ -2174,6 +2379,8 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                       />
                     </svg>
                   </button>
+
+                  {/* Vos autres boutons existants */}
                 </div>
                 <button
                   onClick={() => {
@@ -2185,14 +2392,14 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   }}
                   className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
                     isBackgroundMusicPlaying
-                      ? "bg-emerald-600 text-white shadow-lg"
-                      : "bg-violet-800 text-white shadow-lg"
+                      ? "bg-[#3d9970] text-white shadow-lg"
+                      : "bg-[#0a2463] text-white shadow-lg"
                   }`}
                 >
                   {isBackgroundMusicPlaying ? "Pause musique" : "Jouer musique"}
                 </button>
                 <button
-                  className="bg-violet-800 text-white p-3 rounded-l-lg shadow-lg hover:bg-violet-700 transition-all duration-300"
+                  className="bg-[#0a2463] text-white p-3 rounded-l-lg shadow-lg hover:bg-[#1e3a8a] transition-all duration-300"
                   onClick={() => {
                     const panel = document.getElementById("techPanel");
                     if (panel) {
@@ -2224,9 +2431,9 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                 </button>
               </div>
 
-              <div className="p-5 border-b border-violet-700/30">
+              <div className="p-5 border-b border-gray-200">
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-violet-200 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Volume musique de fond :{" "}
                     {(backgroundVolume * 100).toFixed(0)}%
                   </label>
@@ -2239,10 +2446,10 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                     onChange={(e) =>
                       setBackgroundVolume(Number(e.target.value))
                     }
-                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
-                <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                   Sélection de voix
                 </h3>
                 <div className="space-y-2">
@@ -2255,14 +2462,14 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                         value={voice.id}
                         checked={selectedVoice === voice.id}
                         onChange={() => setSelectedVoice(voice.id)}
-                        className="mr-2 accent-violet-500"
+                        className="mr-2 accent-[#0a2463]"
                       />
                       <label
                         htmlFor={voice.id}
                         className={`cursor-pointer ${
                           selectedVoice === voice.id
-                            ? "text-violet-300 font-medium"
-                            : "text-gray-400"
+                            ? "text-[#0a2463] font-medium"
+                            : "text-gray-600"
                         }`}
                       >
                         {voice.name}
@@ -2273,23 +2480,23 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
 
                 <button
                   onClick={() => {
-                    if (selectedVoice && !processing?.current) {
+                    if (selectedVoice && !processing.current) {
                       speakResponse(
-                        "Ceci est un test de la voix sélectionnée. Comment puis-je vous guider aujourd'hui?"
+                        "Ceci est un test de la voix sélectionnée. Comment puis-je vous aider aujourd'hui?"
                       );
                     }
                   }}
-                  className="mt-4 w-full bg-gradient-to-r from-violet-800 to-purple-800 hover:from-violet-700 hover:to-purple-700 text-white py-2 px-4 rounded-lg transition-all duration-300 shadow-md"
+                  className="mt-4 w-full bg-[#0a2463] hover:bg-[#1e3a8a] text-white py-2 px-4 rounded-lg transition-all duration-300 shadow-md"
                 >
                   Tester la voix
                 </button>
               </div>
-              <div className="p-5 border-b border-violet-700/30">
-                <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              <div className="p-5 border-b border-gray-200">
+                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                   Vitesse de la voix
                 </h3>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-violet-200 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Vitesse: {playbackRate.toFixed(2)}x
                   </label>
                   <input
@@ -2301,16 +2508,16 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                     onChange={(e) =>
                       setPlaybackRate(parseFloat(e.target.value))
                     }
-                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
               </div>
-              <div className="p-5 border-b border-violet-700/30">
-                <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              <div className="p-5 border-b border-gray-200">
+                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                   Calibration Microphone
                 </h3>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-violet-200 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Seuil de détection: {threshold.toFixed(4)}
                     {autoThresholdRef.current !== threshold &&
                       " (Ajusté manuellement)"}
@@ -2322,56 +2529,56 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                     step="0.001"
                     value={threshold}
                     onChange={handleThresholdChange}
-                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
                 {isListening && !isCalibrating && (
                   <button
                     onClick={calibrateMicrophone}
-                    className="w-full px-4 py-2.5 rounded-md font-medium bg-gradient-to-r from-violet-700 to-indigo-700 hover:from-violet-600 hover:to-indigo-600 text-white transition-all duration-300 shadow-md"
+                    className="w-full px-4 py-2.5 rounded-md font-medium bg-[#ff9000] hover:bg-[#e67e00] text-white transition-all duration-300 shadow-md"
                   >
                     Recalibrer microphone
                   </button>
                 )}
                 {isCalibrating && (
-                  <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
                     <div
-                      className="bg-violet-600 h-2.5 rounded-full"
+                      className="bg-[#ff9000] h-2.5 rounded-full"
                       style={{ width: `${calibrationProgress}%` }}
                     ></div>
-                    <p className="text-xs text-violet-300 mt-1">
+                    <p className="text-xs text-gray-500 mt-1">
                       Calibration: {calibrationProgress.toFixed(0)}%
                     </p>
                   </div>
                 )}
               </div>
-              <div className="p-5 border-b border-violet-700/30">
-                <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              <div className="p-5 border-b border-gray-200">
+                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                   États de détection
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-800/60 rounded-xl border border-violet-700/30">
-                    <div className="text-xs font-medium mb-2 text-violet-300">
+                  <div className="p-4 bg-gray-100 rounded-xl">
+                    <div className="text-xs font-medium mb-2 text-gray-700">
                       État de parole:
                     </div>
                     <div className="flex justify-center">
                       <span
                         className={`w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full ${
                           speechBooleanState === 1
-                            ? "bg-emerald-600 text-white shadow-[0_0_10px_rgba(5,150,105,0.5)]"
-                            : "bg-gray-700 text-gray-400"
+                            ? "bg-[#3d9970] text-white"
+                            : "bg-gray-300 text-gray-600"
                         }`}
                       >
                         {speechBooleanState}
                       </span>
                     </div>
                   </div>
-                  <div className="p-4 bg-gray-800/60 rounded-xl border border-violet-700/30">
-                    <div className="text-xs font-medium mb-2 text-violet-300">
+                  <div className="p-4 bg-gray-100 rounded-xl">
+                    <div className="text-xs font-medium mb-2 text-gray-700">
                       Fins de parole:
                     </div>
                     <div className="flex justify-center">
-                      <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-violet-700 text-white shadow-[0_0_10px_rgba(109,40,217,0.3)]">
+                      <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-[#0a2463] text-white">
                         {speechEndCount}
                       </span>
                     </div>
@@ -2379,23 +2586,23 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                 </div>
 
                 {/* Section pour le compteur d'interruptions */}
-                <div className="mt-4 p-4 bg-gray-800/60 rounded-xl border border-violet-700/30">
-                  <div className="text-xs font-medium mb-2 text-violet-300">
+                <div className="mt-4 p-4 bg-gray-100 rounded-xl">
+                  <div className="text-xs font-medium mb-2 text-gray-700">
                     Nombre d'interruptions:
                   </div>
                   <div className="flex justify-center">
-                    <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]">
+                    <span className="w-12 h-12 flex items-center justify-center text-xl font-bold rounded-full bg-[#e63946] text-white">
                       {interruptionCount}
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="p-5 border-b border-violet-700/30">
-                <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              <div className="p-5 border-b border-gray-200">
+                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                   Transcriptions
                 </h3>
                 {transcriptions.length === 0 ? (
-                  <p className="text-gray-400 italic text-sm">
+                  <p className="text-gray-500 italic text-sm">
                     Aucune transcription pour le moment
                   </p>
                 ) : (
@@ -2403,28 +2610,28 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                     {transcriptions.map((trans) => (
                       <div
                         key={trans.id}
-                        className="p-3 bg-gray-800/60 border border-violet-700/30 rounded-lg text-sm"
+                        className="p-3 bg-gray-100 border border-gray-200 rounded-lg text-sm"
                       >
                         <div className="flex justify-between mb-1">
-                          <span className="text-xs font-medium text-violet-300">
+                          <span className="text-xs font-medium text-[#1e3a8a]">
                             Transcription
                           </span>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-gray-500">
                             {trans.timestamp}
                           </span>
                         </div>
-                        <p className="text-violet-100">{trans.text}</p>
+                        <p className="text-gray-800">{trans.text}</p>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="p-5 border-b border-violet-700/30">
-                <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              <div className="p-5 border-b border-gray-200">
+                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                   Audios générés
                 </h3>
                 {audioUrls.length === 0 ? (
-                  <p className="text-gray-400 italic text-sm">
+                  <p className="text-gray-500 italic text-sm">
                     Aucun audio généré pour le moment
                   </p>
                 ) : (
@@ -2441,11 +2648,11 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                   </div>
                 )}
               </div>
-              <div className="p-5 border-b border-violet-700/30">
-                <h3 className="text-md font-semibold mb-3 text-violet-300 font-['Cinzel',serif]">
+              <div className="p-5 border-b border-gray-200">
+                <h3 className="text-md font-semibold mb-3 text-[#1e3a8a] font-['Montserrat',sans-serif]">
                   Informations de débogage
                 </h3>
-                <div className="text-xs space-y-2 bg-gray-800/60 p-3 rounded-lg text-violet-200 border border-violet-700/30">
+                <div className="text-xs space-y-2 bg-gray-100 p-3 rounded-lg text-gray-700">
                   <p>Volume actuel: {volume.toFixed(5)}</p>
                   <p>Seuil actuel: {threshold.toFixed(5)}</p>
                   <p>
@@ -2463,12 +2670,20 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
                     Interruption actuelle:{" "}
                     {interruptionDetected ? "Détectée" : "Aucune"}
                   </p>
+                  <p>
+                    Écoute en arrière-plan :{" "}
+                    {isBackgroundListening ? "Oui" : "Non"}
+                  </p>
+                  <p>
+                    En attente de réponse : {isWaitingForAnswer ? "Oui" : "Non"}
+                  </p>
+                  <p>Transcription en arrière-plan: {backgroundTranscript}</p>
                 </div>
               </div>
               <div className="p-5">
                 <button
                   onClick={resetCounters}
-                  className="w-full px-4 py-3 rounded-lg font-medium bg-gradient-to-r from-violet-800 to-purple-800 hover:from-violet-700 hover:to-purple-700 text-white transition-all duration-300 shadow-md"
+                  className="w-full px-4 py-3 rounded-lg font-medium bg-[#0a2463] hover:bg-[#1e3a8a] text-white transition-all duration-300 shadow-md"
                 >
                   Réinitialiser les compteurs
                 </button>
@@ -2477,22 +2692,8 @@ const DetectionFinal5: React.FC<SpeechDetectorProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Styles CSS pour les animations */}
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </>
   );
 };
 
-export default DetectionFinal5;
+export default DetectionFinal8;

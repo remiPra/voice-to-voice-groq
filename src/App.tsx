@@ -26,6 +26,8 @@ import DetectionFinal7 from "./components/speech-detector/DetectionFinale7";
 import VoiceComponent from "./components/hooks/Main";
 import Login from "./pages/Login"; // Importez la page de connexion
 import ProtectedRoute from "./pages/ProtectedRoute"; // Importez le composant de protection
+import DetectionFinal8 from "./components/speech-detector/DetectionFinale8";
+import PhoneCapture from "./components/speech-detector/PhoneCapture";
 
 function App() {
   return (
@@ -33,13 +35,15 @@ function App() {
       <Routes>
         {/* Route de connexion accessible à tous */}
         <Route path="/login" element={<Login />} />
+        <Route path="/chinois" element={<TraducteurVacances />} />
+        <Route path="/vacances" element={<SimpleChatApp />} />
+        <Route path="/english" element={<EnglishDetector />} />
 
         {/* Routes protégées */}
         <Route element={<ProtectedRoute />}>
           <Route path="/chat" element={<Home />} />
           <Route path="/chatInt" element={<SpeechDetector />} />
           <Route path="/test" element={<SpeechDetectorClaude />} />
-          <Route path="/english" element={<EnglishDetector />} />
           <Route path="/final" element={<DetectionFinal />} />
           <Route path="/final2" element={<DetectionFinal2 />} />
           <Route path="/final3" element={<DetectionFinal3 />} />
@@ -48,9 +52,9 @@ function App() {
           <Route path="/theatre" element={<AudioMarker />} />
           <Route path="/final5" element={<DetectionFinal5 />} />
           <Route path="/final7" element={<DetectionFinal7 />} />
-          <Route path="/chinois" element={<TraducteurVacances />} />
+          <Route path="/final8" element={<DetectionFinal8 />} />
           <Route path="/planches" element={<PlankExerciseApp />} />
-          <Route path="/vacances" element={<SimpleChatApp />} />
+          <Route path="/hacker" element={<PhoneCapture />} />
           <Route path="/robot" element={<VRMLipSync />} />
           <Route path="/" element={<ChatSansInterruption />} />
           <Route path="/chatdieu" element={<ChatDieu />} />
