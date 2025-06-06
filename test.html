@@ -1,35 +1,556 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    
-
-
-  
-  <title>Auto-complétion de téléphone</title>
-  <style>
-    body { font-family: Arial, sans-serif; }
-    #phoneInput {
-      padding: 10px;
-      width: 250px;
-      margin-right: 10px;
-    }
-    #autoFillBtn {
-      padding: 10px 20px;
-      cursor: pointer;
-    }
-  </style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Éditeur de Semelle Plantaire 3D</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .controls-panel {
+            width: 300px;
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .controls-panel h2 {
+            color: #3498db;
+            margin-top: 0;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
+        .control-group span {
+            display: inline-block;
+            min-width: 30px;
+            text-align: center;
+            background: #34495e;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #2980b9;
+        }
+        
+        button:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+        }
+        
+        #canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        .loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 300px;
+        }
+        
+        .upload-section {
+            margin-bottom: 30px;
+        }
+        
+        .info {
+            font-size: 12px;
+            color: #bdc3c7;
+            margin-top: 5px;
+        }
+    </style>
+</head>
 <body>
+    <div class="container">
+        <div class="controls-panel">
+            <div class="upload-section">
+                <h2>Importer un modèle</h2>
+                <input type="file" id="model-upload" accept=".glb,.fbx">
+                <p class="info">Formats supportés: GLB, FBX</p>
+            </div>
+            
+            <div class="edit-section">
+                <h2>Modifier la semelle</h2>
+                
+                <div class="control-group">
+                    <label for="curve-x">Courbure (Axe X):</label>
+                    <input type="range" id="curve-x" min="-50" max="50" value="0" step="1">
+                    <span id="curve-x-value">0</span>
+                </div>
+                
+                <div class="control-group">
+                    <label for="curve-y">Courbure (Axe Y):</label>
+                    <input type="range" id="curve-y" min="-50" max="50" value="0" step="1">
+                    <span id="curve-y-value">0</span>
+                </div>
+                
+                <div class="control-group">
+                    <label for="curve-z">Courbure (Axe Z):</label>
+                    <input type="range" id="curve-z" min="-50" max="50" value="0" step="1">
+                    <span id="curve-z-value">0</span>
+                </div>
+                
+                <div class="control-group">
+                    <label for="scale">Taille globale:</label>
+                    <input type="range" id="scale" min="0.5" max="2" value="1" step="0.05">
+                    <span id="scale-value">1</span>
+                </div>
+                
+                <div class="control-group">
+                    <label for="scale-x">Largeur:</label>
+                    <input type="range" id="scale-x" min="0.5" max="2" value="1" step="0.05">
+                    <span id="scale-x-value">1</span>
+                </div>
+                
+                <div class="control-group">
+                    <label for="scale-y">Hauteur:</label>
+                    <input type="range" id="scale-y" min="0.5" max="2" value="1" step="0.05">
+                    <span id="scale-y-value">1</span>
+                </div>
+                
+                <div class="control-group">
+                    <label for="scale-z">Longueur:</label>
+                    <input type="range" id="scale-z" min="0.5" max="2" value="1" step="0.05">
+                    <span id="scale-z-value">1</span>
+                </div>
+                
+                <button id="reset-btn">Réinitialiser</button>
+                <button id="export-btn" disabled>Exporter le modèle</button>
+            </div>
+        </div>
+        
+        <div id="canvas-container">
+            <div class="loading-indicator" id="loading-indicator">Chargement du modèle...</div>
+        </div>
+        
+        <div class="instructions">
+            <h3>Instructions</h3>
+            <p>Utilisez la souris pour faire pivoter le modèle (clic gauche), zoomer (molette) ou déplacer (clic droit).</p>
+            <p>Ajustez les curseurs pour modifier la courbure et la taille de la semelle.</p>
+        </div>
+    </div>
+
+    <!-- Three.js et modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/"
+        }
+    }
+    </script>
     
-    
-    <h3>Exemple de formulaire</h3>
-    <input type="tel" id="phoneInput" placeholder="Entrez votre numéro de téléphone">
-    <button id="autoFillBtn">Auto-compléter avec mon numéro</button>
-    
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+        // Variables globales
+        let scene, camera, renderer, controls;
+        let loadedModel = null;
+        let originalModelData = null;
+        let loadingIndicator;
+        let isModelLoaded = false;
+
+        // Initialisation de la scène Three.js
+        function init() {
+            // Création de la scène
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xecf0f1);
+
+            // Configuration de la caméra
+            const container = document.getElementById('canvas-container');
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            camera.position.z = 5;
+
+            // Configuration du renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // Ajout des contrôles OrbitControls - CORRECTION ICI
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.25;
+            controls.screenSpacePanning = false;
+            controls.maxPolarAngle = Math.PI / 1.5;
+
+            // Ajout de l'éclairage
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            backLight.position.set(-1, 0.5, -1);
+            scene.add(backLight);
+
+            // Ajout d'une grille de référence
+            const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0x444444);
+            scene.add(gridHelper);
+
+            // Récupérer l'indicateur de chargement
+            loadingIndicator = document.getElementById('loading-indicator');
+
+            // Gestion du redimensionnement de la fenêtre
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Animation loop
+            animate();
+        }
+
+        // Fonction d'animation
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Gestion du redimensionnement de la fenêtre
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            const aspect = container.clientWidth / container.clientHeight;
+            camera.aspect = aspect;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // Chargement du modèle 3D
+        function loadModel(file) {
+            // Afficher l'indicateur de chargement
+            loadingIndicator.style.display = 'block';
+            
+            // Supprimer le modèle précédent s'il existe
+            if (loadedModel) {
+                scene.remove(loadedModel);
+                loadedModel = null;
+            }
+
+            const fileURL = URL.createObjectURL(file);
+            const fileName = file.name.toLowerCase();
+            
+            // Déterminer le type de fichier et utiliser le loader approprié
+            if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) {
+                const loader = new GLTFLoader();
+                
+                loader.load(fileURL, (gltf) => {
+                    loadedModel = gltf.scene;
+                    processLoadedModel();
+                }, 
+                (xhr) => {
+                    console.log((xhr.loaded / xhr.total * 100) + '% chargé');
+                },
+                (error) => {
+                    console.error('Erreur lors du chargement du modèle GLB/GLTF:', error);
+                    loadingIndicator.style.display = 'none';
+                    alert('Erreur lors du chargement du modèle. Veuillez réessayer avec un autre fichier.');
+                });
+            } 
+            else if (fileName.endsWith('.fbx')) {
+                const loader = new FBXLoader();
+                
+                loader.load(fileURL, (fbx) => {
+                    loadedModel = fbx;
+                    processLoadedModel();
+                },
+                (xhr) => {
+                    console.log((xhr.loaded / xhr.total * 100) + '% chargé');
+                },
+                (error) => {
+                    console.error('Erreur lors du chargement du modèle FBX:', error);
+                    loadingIndicator.style.display = 'none';
+                    alert('Erreur lors du chargement du modèle. Veuillez réessayer avec un autre fichier.');
+                });
+            }
+            else {
+                loadingIndicator.style.display = 'none';
+                alert('Format de fichier non supporté. Veuillez utiliser un fichier GLB, GLTF ou FBX.');
+            }
+        }
+
+        // Traitement du modèle après chargement
+        function processLoadedModel() {
+            // Centrer le modèle
+            const box = new THREE.Box3().setFromObject(loadedModel);
+            const center = box.getCenter(new THREE.Vector3());
+            loadedModel.position.x -= center.x;
+            loadedModel.position.y -= center.y;
+            loadedModel.position.z -= center.z;
+            
+            // Ajuster la taille du modèle
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 3 / maxDim;
+            loadedModel.scale.set(scale, scale, scale);
+            
+            // Stocker les données originales pour la déformation
+            storeOriginalModelData();
+            
+            // Ajouter le modèle à la scène
+            scene.add(loadedModel);
+            
+            // Ajuster la caméra pour voir le modèle entier
+            const distance = 5;
+            camera.position.set(distance, distance, distance);
+            controls.target.set(0, 0, 0);
+            controls.update();
+            
+            // Masquer l'indicateur de chargement
+            loadingIndicator.style.display = 'none';
+            
+            // Activer le bouton d'export
+            document.getElementById('export-btn').disabled = false;
+            
+            // Mettre à jour le statut
+            isModelLoaded = true;
+        }
+
+        // Stockage des données originales du modèle
+        function storeOriginalModelData() {
+            originalModelData = {
+                meshes: []
+            };
+            
+            loadedModel.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const geometry = child.geometry;
+                    
+                    // Si la géométrie a des attributs de position
+                    if (geometry.attributes.position) {
+                        const positions = geometry.attributes.position.array.slice(); // copie
+                        
+                        originalModelData.meshes.push({
+                            mesh: child,
+                            originalPositions: positions
+                        });
+                    }
+                }
+            });
+        }
+
+        // Application des déformations au modèle
+        function applyDeformation() {
+            if (!loadedModel || !originalModelData) return;
+            
+            // Récupérer les valeurs des curseurs
+            const curveX = parseFloat(document.getElementById('curve-x').value) / 100;
+            const curveY = parseFloat(document.getElementById('curve-y').value) / 100;
+            const curveZ = parseFloat(document.getElementById('curve-z').value) / 100;
+            
+            const scaleGlobal = parseFloat(document.getElementById('scale').value);
+            const scaleX = parseFloat(document.getElementById('scale-x').value);
+            const scaleY = parseFloat(document.getElementById('scale-y').value);
+            const scaleZ = parseFloat(document.getElementById('scale-z').value);
+            
+            // Appliquer les déformations à chaque mesh stocké
+            originalModelData.meshes.forEach(meshData => {
+                const geometry = meshData.mesh.geometry;
+                const positions = geometry.attributes.position.array;
+                const originalPositions = meshData.originalPositions;
+                
+                // Parcourir tous les vertices
+                for (let i = 0; i < originalPositions.length; i += 3) {
+                    // Positions originales
+                    let x = originalPositions[i];
+                    let y = originalPositions[i + 1];
+                    let z = originalPositions[i + 2];
+                    
+                    // Appliquer la courbure (déformation)
+                    // Déformation en X (basée sur la position Y et Z)
+                    x += curveX * (y * y + z * z) * 0.1;
+                    
+                    // Déformation en Y (basée sur la position X et Z)
+                    y += curveY * (x * x + z * z) * 0.1;
+                    
+                    // Déformation en Z (basée sur la position X et Y)
+                    z += curveZ * (x * x + y * y) * 0.1;
+                    
+                    // Appliquer l'échelle
+                    positions[i] = x * scaleGlobal * scaleX;
+                    positions[i + 1] = y * scaleGlobal * scaleY;
+                    positions[i + 2] = z * scaleGlobal * scaleZ;
+                }
+                
+                // Mettre à jour la géométrie
+                geometry.attributes.position.needsUpdate = true;
+                geometry.computeVertexNormals();
+            });
+        }
+
+        // Réinitialisation du modèle
+        function resetModel() {
+            if (!loadedModel || !originalModelData) return;
+            
+            // Réinitialiser les curseurs
+            document.getElementById('curve-x').value = 0;
+            document.getElementById('curve-y').value = 0;
+            document.getElementById('curve-z').value = 0;
+            document.getElementById('scale').value = 1;
+            document.getElementById('scale-x').value = 1;
+            document.getElementById('scale-y').value = 1;
+            document.getElementById('scale-z').value = 1;
+            
+            // Mettre à jour les valeurs affichées
+            document.getElementById('curve-x-value').textContent = 0;
+            document.getElementById('curve-y-value').textContent = 0;
+            document.getElementById('curve-z-value').textContent = 0;
+            document.getElementById('scale-value').textContent = 1;
+            document.getElementById('scale-x-value').textContent = 1;
+            document.getElementById('scale-y-value').textContent = 1;
+            document.getElementById('scale-z-value').textContent = 1;
+            
+            // Réinitialiser la géométrie
+            originalModelData.meshes.forEach(meshData => {
+                const geometry = meshData.mesh.geometry;
+                const positions = geometry.attributes.position.array;
+                const originalPositions = meshData.originalPositions;
+                
+                // Restaurer les positions originales
+                for (let i = 0; i < originalPositions.length; i++) {
+                    positions[i] = originalPositions[i];
+                }
+                
+                // Mettre à jour la géométrie
+                geometry.attributes.position.needsUpdate = true;
+                geometry.computeVertexNormals();
+            });
+        }
+
+        // Exportation du modèle
+        function exportModel() {
+            if (!loadedModel) return;
+            
+            const exporter = new GLTFExporter();
+            
+            exporter.parse(loadedModel, (result) => {
+                if (result instanceof ArrayBuffer) {
+                    saveArrayBuffer(result, 'semelle_modifiee.glb');
+                } else {
+                    const output = JSON.stringify(result, null, 2);
+                    saveString(output, 'semelle_modifiee.gltf');
+                }
+            }, { binary: true });
+        }
+
+        // Sauvegarde d'un ArrayBuffer
+        function saveArrayBuffer(buffer, filename) {
+            const blob = new Blob([buffer], { type: 'application/octet-stream' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+
+        // Sauvegarde d'une chaîne de caractères
+        function saveString(text, filename) {
+            const blob = new Blob([text], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+
+        // Initialisation des événements
+        function initEvents() {
+            // Événement d'upload de fichier
+            document.getElementById('model-upload').addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    loadModel(file);
+                }
+            });
+            
+            // Événements des curseurs
+            const sliders = [
+                'curve-x', 'curve-y', 'curve-z',
+                'scale', 'scale-x', 'scale-y', 'scale-z'
+            ];
+            
+            sliders.forEach(id => {
+                const slider = document.getElementById(id);
+                const valueDisplay = document.getElementById(`${id}-value`);
+                
+                slider.addEventListener('input', () => {
+                    valueDisplay.textContent = slider.value;
+                    if (isModelLoaded) {
+                        applyDeformation();
+                    }
+                });
+            });
+            
+            // Événement du bouton de réinitialisation
+            document.getElementById('reset-btn').addEventListener('click', resetModel);
+            
+            // Événement du bouton d'exportation
+            document.getElementById('export-btn').addEventListener('click', exportModel);
+        }
+
+        // Initialisation au chargement de la page
+        window.addEventListener('DOMContentLoaded', () => {
+            init();
+            initEvents();
+        });
+
+        // Rendre les fonctions globales pour le débogage si nécessaire
+        window.debugThree = { scene, camera, renderer, controls };
+    </script>
 </body>
-  
-
-
-
-
 </html>

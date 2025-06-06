@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convertisseur d'Empreintes Plantaires 2D vers Semelles 3D</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+        .upload-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            border: 2px dashed #dee2e6;
+            transition: all 0.3s ease;
+        }
+        .upload-section:hover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+        .upload-area {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .file-input {
+            display: none;
+        }
+        .upload-btn {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(33, 150, 243, 0.3);
+        }
+        .preview-canvas {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        .control-group {
+            margin: 15px 0;
+        }
+        .control-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #555;
+        }
+        .slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .viewer-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            min-height: 500px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #4CAF50, #8BC34A);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .export-controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #dee2e6;
+        }
+        .export-btn {
+            background: linear-gradient(45deg, #4CAF50, #8BC34A);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(76, 175, 80, 0.3);
+        }
+        .export-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .info-panel {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .status {
+            text-align: center;
+            padding: 20px;
+            font-weight: 500;
+            color: #666;
+        }
+        #viewer3d {
+            width: 100%;
+            height: 400px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #263238;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🦶 Convertisseur d'Empreintes 2D → Semelles 3D</h1>
+            <p>Transformation professionnelle d'empreintes plantaires en semelles thermoformées de 2mm</p>
+        </div>
+        
+        <div class="main-content">
+            <!-- Section Upload et Traitement -->
+            <div class="upload-section">
+                <div class="upload-area">
+                    <input type="file" id="imageInput" class="file-input" accept="image/*">
+                    <button class="upload-btn" onclick="document.getElementById('imageInput').click()">
+                        📁 Charger une empreinte de pied
+                    </button>
+                    <p style="margin-top: 15px; color: #666;">
+                        Formats supportés: JPG, PNG, GIF<br>
+                        Résolution recommandée: 600x400px minimum
+                    </p>
+                </div>
+                
+                <canvas id="previewCanvas" class="preview-canvas" style="display: none;"></canvas>
+                
+                <div class="controls" id="controls" style="display: none;">
+                    <div class="control-group">
+                        <label for="thresholdSlider">Seuil de détection des contours:</label>
+                        <input type="range" id="thresholdSlider" class="slider" min="50" max="200" value="120">
+                        <span id="thresholdValue">120</span>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="heightSlider">Hauteur maximale (mm):</label>
+                        <input type="range" id="heightSlider" class="slider" min="1" max="10" value="4" step="0.5">
+                        <span id="heightValue">4</span> mm
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="thicknessSlider">Épaisseur de base (mm):</label>
+                        <input type="range" id="thicknessSlider" class="slider" min="1.5" max="3" value="2" step="0.1">
+                        <span id="thicknessValue">2</span> mm
+                    </div>
+                    
+                    <div class="control-group">
+                        <button class="upload-btn" onclick="generateFootprint()" style="width: 100%;">
+                            🔄 Générer le modèle 3D
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="progress-bar" id="progressBar" style="display: none;">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                
+                <div class="info-panel">
+                    <strong>Processus de conversion:</strong><br>
+                    1. Détection automatique des contours<br>
+                    2. Analyse des zones de pression<br>
+                    3. Génération du maillage 3D<br>
+                    4. Application de l'épaisseur 2mm<br>
+                    5. Optimisation pour l'impression 3D
+                </div>
+            </div>
+            
+            <!-- Section Visualisation 3D -->
+            <div class="viewer-section">
+                <div id="viewer3d"></div>
+                <div class="status" id="status">
+                    Chargez une image d'empreinte pour commencer
+                </div>
+                
+                <div class="export-controls">
+                    <button class="export-btn" id="exportSTL" onclick="exportModel('stl')" disabled>
+                        📄 Exporter STL
+                    </button>
+                    <button class="export-btn" id="exportOBJ" onclick="exportModel('obj')" disabled>
+                        📄 Exporter OBJ
+                    </button>
+                    <button class="export-btn" id="exportPLY" onclick="exportModel('ply')" disabled>
+                        📄 Exporter PLY
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js et bibliothèques -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/OBJExporter.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://docs.opencv.org/4.8.0/opencv.js"></script>
+
+    <script>
+        // Variables globales
+        let scene, camera, renderer, controls;
+        let currentMesh = null;
+        let originalImageData = null;
+        let processedContours = null;
+
+        // Initialisation de la scène 3D
+        function initThreeJS() {
+            const container = document.getElementById('viewer3d');
+            
+            // Scène
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x263238);
+            
+            // Caméra
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 15, 20);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+            
+            // Contrôles
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Éclairage
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            const pointLight = new THREE.PointLight(0x00ffff, 0.5, 50);
+            pointLight.position.set(-10, 5, 5);
+            scene.add(pointLight);
+            
+            // Grille de référence
+            const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x444444);
+            scene.add(gridHelper);
+            
+            // Boucle d'animation
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Gestion du redimensionnement
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('viewer3d');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // Chargement de l'image
+        document.getElementById('imageInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    loadImage(e.target.result);
+                };
+                reader.readAsDataURL(file);
+                updateStatus('Chargement de l\'image...');
+            }
+        });
+
+        function loadImage(imageSrc) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.getElementById('previewCanvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Redimensionner si nécessaire
+                const maxWidth = 400;
+                const maxHeight = 300;
+                let { width, height } = img;
+                
+                if (width > maxWidth || height > maxHeight) {
+                    const ratio = Math.min(maxWidth / width, maxHeight / height);
+                    width *= ratio;
+                    height *= ratio;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                canvas.style.display = 'block';
+                document.getElementById('controls').style.display = 'block';
+                
+                originalImageData = ctx.getImageData(0, 0, width, height);
+                updateStatus('Image chargée. Ajustez les paramètres et générez le modèle 3D.');
+            };
+            img.src = imageSrc;
+        }
+
+        // Gestion des sliders
+        ['threshold', 'height', 'thickness'].forEach(param => {
+            const slider = document.getElementById(param + 'Slider');
+            const value = document.getElementById(param + 'Value');
+            slider.addEventListener('input', function() {
+                value.textContent = this.value;
+            });
+        });
+
+        // Génération du modèle 3D
+        function generateFootprint() {
+            if (!originalImageData) return;
+            
+            updateStatus('Traitement de l\'image...');
+            showProgress(10);
+            
+            setTimeout(() => {
+                try {
+                    // Traitement avec OpenCV.js
+                    processImageWithOpenCV();
+                    showProgress(40);
+                    
+                    setTimeout(() => {
+                        // Génération du maillage 3D
+                        generate3DModel();
+                        showProgress(80);
+                        
+                        setTimeout(() => {
+                            showProgress(100);
+                            updateStatus('Modèle 3D généré avec succès!');
+                            enableExportButtons();
+                        }, 500);
+                    }, 500);
+                }, 500);
+            }, 100);
+        }
+
+        function processImageWithOpenCV() {
+            if (typeof cv === 'undefined') {
+                console.warn('OpenCV.js non disponible, utilisation du traitement Canvas natif');
+                processImageWithCanvas();
+                return;
+            }
+            
+            const canvas = document.getElementById('previewCanvas');
+            const src = cv.imread(canvas);
+            const gray = new cv.Mat();
+            const blur = new cv.Mat();
+            const edges = new cv.Mat();
+            
+            // Conversion en niveaux de gris
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+            
+            // Flou gaussien pour réduire le bruit
+            cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+            
+            // Détection de contours avec Canny
+            const threshold = parseInt(document.getElementById('thresholdSlider').value);
+            cv.Canny(blur, edges, threshold * 0.5, threshold);
+            
+            // Trouver les contours
+            const contours = new cv.MatVector();
+            const hierarchy = new cv.Mat();
+            cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            
+            // Stocker les contours pour la génération 3D
+            processedContours = [];
+            for (let i = 0; i < contours.size(); i++) {
+                const contour = contours.get(i);
+                const points = [];
+                for (let j = 0; j < contour.rows; j++) {
+                    const point = contour.data32S.slice(j * 2, j * 2 + 2);
+                    points.push({ x: point[0], y: point[1] });
+                }
+                if (points.length > 50) { // Filtrer les petits contours
+                    processedContours.push(points);
+                }
+            }
+            
+            // Nettoyage
+            src.delete();
+            gray.delete();
+            blur.delete();
+            edges.delete();
+            contours.delete();
+            hierarchy.delete();
+        }
+
+        function processImageWithCanvas() {
+            // Traitement d'image natif Canvas (fallback)
+            const canvas = document.getElementById('previewCanvas');
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Détection simple de contours par différence de gradient
+            const contourPoints = [];
+            const threshold = parseInt(document.getElementById('thresholdSlider').value);
+            
+            for (let y = 1; y < canvas.height - 1; y++) {
+                for (let x = 1; x < canvas.width - 1; x++) {
+                    const idx = (y * canvas.width + x) * 4;
+                    const gray = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                    
+                    // Gradient horizontal et vertical
+                    const gx = data[idx + 4] - data[idx - 4];
+                    const gy = data[idx + canvas.width * 4] - data[idx - canvas.width * 4];
+                    const gradient = Math.sqrt(gx * gx + gy * gy);
+                    
+                    if (gradient > threshold && gray < 200) {
+                        contourPoints.push({ x: x, y: y, intensity: 255 - gray });
+                    }
+                }
+            }
+            
+            processedContours = [contourPoints];
+        }
+
+        function generate3DModel() {
+            if (!processedContours || processedContours.length === 0) return;
+            
+            // Supprimer l'ancien maillage
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh.geometry.dispose();
+                currentMesh.material.dispose();
+            }
+            
+            const canvas = document.getElementById('previewCanvas');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Paramètres
+            const maxHeight = parseFloat(document.getElementById('heightSlider').value);
+            const baseThickness = parseFloat(document.getElementById('thicknessSlider').value);
+            
+            // Créer la géométrie à partir des données d'image
+            const geometry = new THREE.PlaneGeometry(20, 15, width - 1, height - 1);
+            const vertices = geometry.attributes.position.array;
+            
+            // Appliquer la carte de hauteur basée sur l'intensité des pixels
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            
+            for (let i = 0; i < vertices.length / 3; i++) {
+                const x = Math.floor((vertices[i * 3] / 20 + 0.5) * width);
+                const y = Math.floor((0.5 - vertices[i * 3 + 1] / 15) * height);
+                
+                if (x >= 0 && x < width && y >= 0 && y < height) {
+                    const pixelIndex = (y * width + x) * 4;
+                    const brightness = (data[pixelIndex] + data[pixelIndex + 1] + data[pixelIndex + 2]) / 3;
+                    
+                    // Inverser la luminosité : zones sombres = plus hautes (plus de pression)
+                    const normalizedHeight = (255 - brightness) / 255;
+                    vertices[i * 3 + 2] = normalizedHeight * maxHeight + baseThickness;
+                } else {
+                    vertices[i * 3 + 2] = baseThickness;
+                }
+            }
+            
+            geometry.attributes.position.needsUpdate = true;
+            geometry.computeVertexNormals();
+            
+            // Matériau avec dégradé de couleur basé sur la hauteur
+            const material = new THREE.MeshLambertMaterial({
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.9
+            });
+            
+            // Ajouter les couleurs basées sur la hauteur
+            const colors = new Float32Array(vertices.length);
+            for (let i = 0; i < vertices.length / 3; i++) {
+                const height = vertices[i * 3 + 2];
+                const normalizedHeight = (height - baseThickness) / maxHeight;
+                
+                // Dégradé du bleu (bas) au rouge (haut)
+                colors[i * 3] = normalizedHeight; // Rouge
+                colors[i * 3 + 1] = 0.3; // Vert
+                colors[i * 3 + 2] = 1 - normalizedHeight; // Bleu
+            }
+            
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            // Créer le maillage
+            currentMesh = new THREE.Mesh(geometry, material);
+            currentMesh.receiveShadow = true;
+            currentMesh.castShadow = true;
+            scene.add(currentMesh);
+            
+            // Centrer la caméra sur le modèle
+            const box = new THREE.Box3().setFromObject(currentMesh);
+            const center = box.getCenter(new THREE.Vector3());
+            controls.target.copy(center);
+            
+            updateStatus('Modèle 3D généré! Utilisez la souris pour naviguer.');
+        }
+
+        // Export des modèles
+        function exportModel(format) {
+            if (!currentMesh) return;
+            
+            let exporter, content, filename, mimeType;
+            
+            switch (format) {
+                case 'stl':
+                    exporter = new THREE.STLExporter();
+                    content = exporter.parse(currentMesh, { binary: false });
+                    filename = 'semelle_thermoformee.stl';
+                    mimeType = 'application/vnd.ms-pki.stl';
+                    break;
+                case 'obj':
+                    exporter = new THREE.OBJExporter();
+                    content = exporter.parse(currentMesh);
+                    filename = 'semelle_thermoformee.obj';
+                    mimeType = 'text/plain';
+                    break;
+                case 'ply':
+                    content = generatePLY(currentMesh);
+                    filename = 'semelle_thermoformee.ply';
+                    mimeType = 'text/plain';
+                    break;
+                default:
+                    return;
+            }
+            
+            const blob = new Blob([content], { type: mimeType });
+            saveAs(blob, filename);
+            
+            updateStatus(`Modèle exporté en format ${format.toUpperCase()}`);
+        }
+
+        function generatePLY(mesh) {
+            const geometry = mesh.geometry;
+            const vertices = geometry.attributes.position.array;
+            const colors = geometry.attributes.color ? geometry.attributes.color.array : null;
+            const vertexCount = vertices.length / 3;
+            
+            let ply = 'ply\n';
+            ply += 'format ascii 1.0\n';
+            ply += `element vertex ${vertexCount}\n`;
+            ply += 'property float x\n';
+            ply += 'property float y\n';
+            ply += 'property float z\n';
+            if (colors) {
+                ply += 'property uchar red\n';
+                ply += 'property uchar green\n';
+                ply += 'property uchar blue\n';
+            }
+            ply += 'end_header\n';
+            
+            for (let i = 0; i < vertexCount; i++) {
+                const x = vertices[i * 3];
+                const y = vertices[i * 3 + 1];
+                const z = vertices[i * 3 + 2];
+                
+                ply += `${x.toFixed(6)} ${y.toFixed(6)} ${z.toFixed(6)}`;
+                
+                if (colors) {
+                    const r = Math.round(colors[i * 3] * 255);
+                    const g = Math.round(colors[i * 3 + 1] * 255);
+                    const b = Math.round(colors[i * 3 + 2] * 255);
+                    ply += ` ${r} ${g} ${b}`;
+                }
+                
+                ply += '\n';
+            }
+            
+            return ply;
+        }
+
+        // Utilitaires UI
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        function showProgress(percent) {
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            
+            progressBar.style.display = 'block';
+            progressFill.style.width = percent + '%';
+            
+            if (percent >= 100) {
+                setTimeout(() => {
+                    progressBar.style.display = 'none';
+                }, 2000);
+            }
+        }
+
+        function enableExportButtons() {
+            ['exportSTL', 'exportOBJ', 'exportPLY'].forEach(id => {
+                document.getElementById(id).disabled = false;
+            });
+        }
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            // Attendre que OpenCV.js soit chargé
+            function onOpenCvReady() {
+                initThreeJS();
+                updateStatus('Système prêt. Chargez une image d\'empreinte pour commencer.');
+            }
+            
+            if (typeof cv !== 'undefined') {
+                if (cv.Mat) {
+                    onOpenCvReady();
+                } else {
+                    cv.onRuntimeInitialized = onOpenCvReady;
+                }
+            } else {
+                setTimeout(() => {
+                    initThreeJS();
+                    updateStatus('Système prêt (mode Canvas natif). Chargez une image d\'empreinte pour commencer.');
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -20,7 +20,6 @@ import DetectionFinal4 from "./components/speech-detector/DetectionFinale4";
 import VRMMouthTest from "./components/speech-detector/VRMMouthTest";
 import DetectionFinal5 from "./components/speech-detector/DetectionFInale5";
 import AudioMarker from "./components/speech-detector/AudioMarker";
-import EventFlower from "./pages/Fleurs";
 import DetectionFinal6 from "./components/speech-detector/DetectionFInale6";
 import DetectionFinal7 from "./components/speech-detector/DetectionFinale7";
 import VoiceComponent from "./components/hooks/Main";
@@ -28,6 +27,10 @@ import Login from "./pages/Login"; // Importez la page de connexion
 import ProtectedRoute from "./pages/ProtectedRoute"; // Importez le composant de protection
 import DetectionFinal8 from "./components/speech-detector/DetectionFinale8";
 import PhoneCapture from "./components/speech-detector/PhoneCapture";
+import ChatWithMemory from "./pages/ChatWithMemory";
+import CoachMinceurChat from "./pages/CoachMinceur";
+import TestDetectionVoix from "./components/speech-detector/TestDetectionVoix";
+import ConversationVocaleAutos from "./components/speech-detector/DetectionFinal06062025";
 
 function App() {
   return (
@@ -63,9 +66,13 @@ function App() {
             path="/epitact"
             element={<ProductGallery products={productsData} />}
           />
+          <Route path="/chtmemory" element={<ChatWithMemory />} />
+          <Route path="/testdetection" element={<TestDetectionVoix />} />
+
           <Route path="/mouth" element={<VRMMouthTest />} />
+          <Route path="/minceur" element={<CoachMinceurChat />} />
           <Route path="/complete" element={<VoiceComponent />} />
-          <Route path="/fleurs" element={<EventFlower />} />
+          <Route path="/testdetections" element={<ConversationVocaleAutos />} />
           <Route path="/epitactai" element={<EpitactAI />} />
         </Route>
       </Routes>
