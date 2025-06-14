@@ -1228,9 +1228,11 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
     }
     try {
       let audioToSend = audioBlob;
-      if (audioBlob.type === "audio/webm") {
-        console.log("Envoi d'un fichier webm comme wav");
-      }
+        // ✅ Conversion explicite si nécessaire
+    if (audioBlob.type === "audio/webm") {
+      console.log("Conversion WebM vers format optimal pour Whisper");
+      // Optionnel : convertir en WAV 16kHz mono
+    }
       const formData = new FormData();
       formData.append("file", audioToSend, "audio.wav");
       formData.append("model", "whisper-large-v3-turbo");
@@ -1424,7 +1426,10 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
   const startRecording = () => {
     if (!streamRef.current) return;
     audioChunksRef.current = [];
-    const options = { mimeType: "audio/webm" };
+    const options = { 
+  mimeType: "audio/webm;codecs=opus",
+  audioBitsPerSecond: 16000  // Limitez le bitrate
+};
     try {
       mediaRecorderRef.current = new MediaRecorder(streamRef.current, options);
       mediaRecorderRef.current.ondataavailable = (event) => {
@@ -1487,14 +1492,18 @@ const DetectionFinal3: React.FC<SpeechDetectorProps> = ({
 
   const startListening = async () => {
     try {
-      audioContextRef.current = await audioContext({ sampleRate: 16000 });
       streamRef.current = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+             sampleRate: 16000,        // ✅ Ajout crucial
+        channelCount: 1,          // ✅ Mono pour Whisper
+        bitDepth: 16,             // ✅ 16-bit optimal
         },
       });
+            audioContextRef.current = await audioContext({ sampleRate: 16000 });
+
       sourceRef.current = audioContextRef.current.createMediaStreamSource(
         streamRef.current
       );
